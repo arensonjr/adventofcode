@@ -1,0 +1,6 @@
+# Build artifacts
+**/*.hi
+**/*.o
+**/*.exe
+
+**/dist-newstyle/*
