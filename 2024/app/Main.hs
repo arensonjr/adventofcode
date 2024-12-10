@@ -3,20 +3,24 @@
 module Main where
 
 import Control.Exception (IOException, catch)
-import Data.List (sort, findIndices, elemIndices, sortBy, isInfixOf, transpose)
+import Data.List (sort, findIndices, elemIndices, elemIndex, sortBy, isInfixOf, transpose)
 import Data.List.Split (splitOn)
-import Data.Ord (Down(Down), comparing)
-import Data.Maybe (catMaybes)
+import Data.Ord (Down(Down), comparing, Ordering(LT, EQ, GT))
+import Data.Maybe (catMaybes, isJust, isNothing)
 import Debug.Trace (trace)
 import System.Environment (getArgs)
+import System.IO (isEOF)
 
 import Text.Regex (Regex, mkRegex, matchRegex, matchRegexAll)
 
 import qualified Data.List as L
 import qualified Data.Map as M
+import qualified Data.MultiMap as MM
 import qualified Data.Set as S
+import qualified Data.HashSet as HS
 import qualified Data.DiGraph as G
 
+-- I wonder if I'd use this...
 (%) :: (a ->b) -> (b -> c) -> a -> c
 (%) = flip (.)
 infixr 9 %
@@ -37,15 +41,15 @@ readPart :: String -> Part
 readPart = read
 
 runDay :: Day -> Part -> [[String]] -> Int
-runDay Day1  = day1 
-runDay Day2  = day2 
-runDay Day3  = day3 
-runDay Day4  = day4 
-runDay Day5  = day5 
-runDay Day6  = day6 
-runDay Day7  = day7 
-runDay Day8  = day8 
-runDay Day9  = day9 
+runDay Day1  = day1
+runDay Day2  = day2
+runDay Day3  = day3
+runDay Day4  = day4
+runDay Day5  = day5
+runDay Day6  = day6
+runDay Day7  = day7
+runDay Day8  = day8
+runDay Day9  = day9
 runDay Day10 = day10
 runDay Day11 = day11
 runDay Day12 = day12
@@ -71,11 +75,13 @@ step tag val = trace (tag ++ ": {{ " ++ show val ++ " }}") val
 
 getLines :: IO [[String]]
 getLines = do
-    line <- getLine `catch` \(e :: IOException) -> return []
---    case line of
---        [] -> return []
---        ls -> fmap ((:) . parseLine $ line) getLines
-    (:) (parseLine line) <$> getLines
+    done <- isEOF
+    if done then return [] else do
+        line <- getLine `catch` \(e :: IOException) -> return []
+    --    case line of
+    --        [] -> return []
+    --        ls -> fmap ((:) . parseLine $ line) getLines
+        (:) (parseLine line) <$> getLines
 
 parseLine :: String -> [String]
 parseLine [] = []
@@ -84,10 +90,10 @@ parseLine ls = filter (not . null) . words $ ls
 main :: IO ()
 main = do
     args <- getArgs
-    let day = (readDay . head) args
-    let part = (readPart . head . drop 1) args
+    let day = readDay (head args)
+    let part = readPart (args !! 1)
     lines <- getLines
-    putStrLn . show . runDay day part $ lines
+    print . runDay day part $ lines
 
 --------------------------------------------------------------
 
@@ -101,7 +107,7 @@ day1 Part1 nums = do
 day1 Part2 nums = do
     let left = step "left" (sort . map (head . map read) $ nums)
     let right = step "right" (sort . map (last . map read) $ nums)
-    let counts = map (\x -> length . elemIndices x $ right) left 
+    let counts = map (\x -> length . elemIndices x $ right) left
     sum [x * y | (x, y) <- zip left counts]
 
 day2 :: Part -> [[String]] -> Int
@@ -143,7 +149,7 @@ maybeMul additionEnabled line =
 rotate =  drop <> take
 
 day4 :: Part -> [[String]] -> Int
-findXmas = length . findAll (mkRegex "(XMAS)") 
+findXmas = length . findAll (mkRegex "(XMAS)")
 diagonalize :: [[a]] -> [[a]]
 diagonalize = (transpose . diagonalizeTop_) <> (drop 1 . transpose . diagonalizeBot_)
 diagonalizeTop_ [] = []
@@ -173,31 +179,44 @@ surrounding grid (x, y) = do
     let aroundIndices = [(x-1, y-1), (x+1, y-1), (x+1, y+1), (x-1, y+1)]
     catMaybes [M.lookup coords grid | coords <- aroundIndices]
 -- Sort/equal is not the right way to do this. Hmm
---isXMas grid = ("MMSS" ==) . sort . surrounding grid
 isXMas grid coord = do
     let surround = surrounding grid coord
-    any (=="MMSS") $ map (flip rotate surround) [0..3]
+    elem "MMSS" . map (`rotate` surround) $ [0..3]
 
 day5 :: Part -> [[String]] -> Int
-parseDay5 :: [[String]] -> (G.DiGraph Int, [[Int]])
 parseDay5 input = do
-    let inp = step "inp" $ map head (step "input" input)
-    let edges = step "edges unparsed" $ takeWhile isEdge inp
-    let lists = step "lists unparsed" $ drop (length edges + 1) (step "inp" inp)
-    (G.fromEdges (map parseDay5Edge edges), map parseDay5List lists)
-
-isEdge = elem '|'
---parseDay5Edge line = let edge = head line in ((read . take 2) edge, (read . drop 3) edge)
+    let [edges, lists] = step "split lits" [map head ls | ls <- splitOn [[]] input]
+    (MM.fromList (map parseDay5Edge edges), map parseDay5List lists)
 parseDay5Edge = (\[x, y] -> (x, y)) . map read . splitOn "|"
 parseDay5List = map read . splitOn "," . step "lists"
+checkDay5List graph ls = (not . or) [elemIndex x ls > elemIndex y ls | (x, y) <- MM.toList graph, x `elem` ls, y `elem` ls]
+graphOrdering graph x y
+  | y `elem` MM.lookup x graph = LT
+  | x `elem` MM.lookup y graph = GT
+  | otherwise = EQ
+mid ls = ls !! (length ls `div` 2)
 
 day5 Part1 nums = do
-    let (graph, ls) = step "parsed" $ parseDay5 nums
-    length ls
-day5 Part2 nums = 0
+    let (graph, lists) = parseDay5 nums
+    let withLens = zip lists (map length lists)
+    let mids = step "mids" $ [ls !! (len `div` 2) | (ls, len) <- withLens]
+    let checked = step "checked" $ map (checkDay5List graph) lists
+    sum [mid | (mid, check) <- zip mids checked, check]
+
+day5 Part2 nums = do
+    let (graph, lists) = parseDay5 nums
+    let checked = step "checked" $ map (checkDay5List graph) lists
+    let nonsorted = [list | (list, check) <- zip lists checked, not check]
+    let sorted = map (sortBy (graphOrdering graph)) nonsorted
+    let mids = step "mids" $ [ls !! (length ls `div` 2) | ls <- sorted]
+    sum mids
 
 
-day6  part nums = 0
+
+day6 :: Part -> [[String]] -> Int
+day6 Part1 input = 0
+day6 Part2 input = 0
+
 day7  part nums = 0
 day8  part nums = 0
 day9  part nums = 0
