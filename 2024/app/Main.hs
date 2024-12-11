@@ -87,7 +87,7 @@ findAll pattern input =
 -- "<>" is "`mappend`", the monoid "add":
 -- rotate n xs = drop n xs ++ take n xs
 -- rotate n = drop n <> take n
-rotate :: [a] -> Int -> [a]
+rotate :: Int -> [a] -> [a]
 rotate =  drop <> take
 
 getLines :: IO [[String]]
@@ -384,8 +384,28 @@ fileFit file@(File fileId fileStart fileSize) allFrees@(free@(Free freeStart fre
     else -- if fileSize > freeSize
         let (newFile, newFrees) = fileFit file frees in (newFile, free:newFrees)
     
+day10 :: Part -> [[String]] -> Int
+parseDay10 = step "parsed input" . M.map digitToInt . indexify . map head
+neighbors (x, y) = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
 
-day10 Part1 input = 0
+dfs10 :: M.Map Coord Int -> Int -> Coord -> [Coord]
+dfs10 grid 9 coord = [coord]
+dfs10 grid val coord = do
+    let nbrs = step ("found neighbors of " ++ show val ++ " at " ++ show coord) $ filter (flip M.lookup grid & (Just (val+1)==)) (neighbors coord)
+    L.concat $ map (dfs10 grid (val+1)) nbrs
+
+day10 Part1 input = do
+    let grid = parseDay10 input
+    let zeros = step "found zeros" [coord | coord <- M.keys grid, M.lookup coord grid == Just 0]
+    let nines = map (dfs10 grid 0 & step "found nines" & L.nub & length) zeros
+    sum nines
+
+day10 Part2 input = do
+    let grid = parseDay10 input
+    let zeros = step "found zeros" [coord | coord <- M.keys grid, M.lookup coord grid == Just 0]
+    let nines = map (dfs10 grid 0 & step "found nines" & length) zeros
+    sum nines
+
 day11 Part1 input = 0
 day12 Part1 input = 0
 day13 Part1 input = 0
