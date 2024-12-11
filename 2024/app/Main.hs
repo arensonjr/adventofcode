@@ -3,13 +3,14 @@
 module Main where
 
 import Control.Exception (IOException, catch)
-import Data.List (sort, findIndices, elemIndices, elemIndex, sortBy, isInfixOf, transpose)
+import Data.List (sort, findIndices, elemIndices, elemIndex, sortBy, isInfixOf, transpose, isPrefixOf, isSuffixOf)
 import Data.List.Split (splitOn)
 import Data.Ord (Down(Down), comparing, Ordering(LT, EQ, GT))
-import Data.Maybe (catMaybes, isJust, isNothing, listToMaybe)
+import Data.Maybe (catMaybes, isJust, isNothing, listToMaybe, fromMaybe)
 import Debug.Trace (trace)
 import System.Environment (getArgs)
 import System.IO (isEOF)
+import Text.Read (readMaybe)
 
 import Text.Regex (Regex, mkRegex, matchRegex, matchRegexAll)
 
@@ -82,10 +83,7 @@ runDay Day24 = day24
 runDay Day25 = day25
 
 step :: (Show a) => String -> a -> a
--- DEBUG:
--- step tag val = trace (tag ++ ": {{ " ++ show val ++ " }}") val 
--- NO DEBUG:
-step tag val = val
+step tag val = if debug then trace (tag ++ ": {{ " ++ show val ++ " }}") val else val
 
 getLines :: IO [[String]]
 getLines = do
@@ -253,15 +251,14 @@ parseDay6 lines = do
     (startPos, boxes, size)
 
 nextBox size boxes pos vector = do
-    let candidates = step "candidates" $ extend pos vector (fromInteger (-1)) size
-    let found = step "found" $ L.intersect candidates boxes
-    let nextFound = step "nextFound" $ listToMaybe $ sortBy (comparing (taxiDistance pos)) found
+    let candidates = extend pos vector (fromInteger (-1)) size
+    let nextFound = listToMaybe $ sortBy (comparing (taxiDistance pos)) (L.intersect candidates boxes)
     case nextFound of
-       Nothing -> step "next found nothing" Nothing
-       Just next -> do
-            let newBoxes = step "newBoxes" $ extend pos vector (pos + vector) (next - vector)
-            let newVector = step "newVector" $ rightTurn vector
-            Just (next - vector, S.fromList newBoxes, newVector)
+       Nothing -> Nothing
+       -- Conditional necessary because for part 2, standing in place counts as having looped (which is not what I intended)
+       Just next -> if next == pos + vector then Nothing else
+                    let newBoxes = extend pos vector (pos + vector) (next - vector)
+                    in Just (next - vector, S.fromList newBoxes, rightTurn vector)
 
 walk visited boxes pos size vector = do
     case nextBox size boxes pos vector of
@@ -269,69 +266,69 @@ walk visited boxes pos size vector = do
         Nothing -> S.union visited . S.fromList $ extend pos vector (fromInteger (-1)) size
 
 day6 Part1 input = do
-    let (startPos, boxes, size) = step "parsed" $ parseDay6 input
+    let (startPos, boxes, size) = parseDay6 input
     let vector = (0, -1) -- up
-    let visited = step "final visited" $ walk (S.fromList [startPos]) boxes startPos size vector
+    let visited = walk (S.fromList [startPos]) boxes startPos size vector
     length visited
 
 day6 Part2 input = do
-    let (startPos, boxes, size) = step "parsed" $ parseDay6 input
+    let (startPos, boxes, size@(sizeX, sizeY)) = parseDay6 input
     let vector = (0, -1) -- up
-    let corners = step "final corners" $ walkCorners [] boxes startPos size vector
-    let obstacles = step "obstacles" $ setObstacles boxes (startPos:reverse corners)
-    (length . S.fromList) obstacles
+    let candidateBoxes = [(x, y) | x <- [0..sizeX-1], y <- [0..sizeY-1],
+                                  not ((x, y) `elem` boxes)]
+    let results = map (\b -> (b, tryWalk [] ((step "trying box" b):boxes) startPos size vector)) $ candidateBoxes
+    (length . S.fromList . step "final obstacles") [pos | (pos, Just True) <- results]
 
-nextBoxCorners size boxes pos vector = do
-    let candidates = step "candidates" $ extend pos vector (fromInteger (-1)) size
-    let found = step "found" $ L.intersect candidates boxes
-    let nextFound = step "nextFound" $ listToMaybe $ sortBy (comparing (taxiDistance pos)) found
-    case nextFound of
-       Nothing -> step "next found nothing" Nothing
-       Just next -> do
-            let newVector = step "newVector" $ rightTurn vector
-            Just (next - vector, newVector)
-walkCorners corners boxes pos size vector = do
-    case nextBoxCorners size boxes pos vector of
-        Just (nextPos, newVector) -> walkCorners (nextPos:corners) boxes nextPos size newVector
-        Nothing -> corners
+tryWalk visited boxes pos size vector = do
+    (nextPos, _, newVector) <- nextBox size boxes pos vector
+    if nextPos `elem` visited
+        then return True
+        else tryWalk (nextPos:visited) boxes nextPos size newVector
 
--- TODO: This doesn't work and not sure why. Probably time to just go brute-force and try each new box location to see if I
--- re-cross the same corner before exiting the grid.
-setObstacles :: [Coord] -> [Coord] -> [Coord]
-setObstacles boxes (x:y:z:rest) = do
-    -- TODO: Technically, I should account for the obstacles being 1 step farther
-    -- than where the guard stops, but I don't think it'll matter...
-    -- TODO: Need to handle overshoots: the actual obstacle was sooner than the theoretical obstacle would have to be
-    -- TODO: Probably need to handle when the theoretical obstacle would have blocked a traversal earlier in the path
-    let obstacle = step "newObstacle" $ findObstacle (step "x" x) (step "y" y) (step "z" z)
-    let onTheWay = step "onTheWay" $ extend z (signum (obstacle - z)) z obstacle
-    let remainder = step "remainder" $ setObstacles boxes (y:z:rest)
-    if null (step "intersected" $ L.intersect onTheWay boxes)
-        then obstacle : remainder
-        else remainder
-setObstacles _ tooFewCorners = []
+day7 :: Part -> [[String]] -> Int
+parseDay7Line :: [String] -> (Int, [Int])
+parseDay7Line line = step "parsedLine" $ (((head & init & read) line), (map read . tail) line)
 
-findObstacle (x1, y1) (x2, y2) (x3, y3)
-    | x1 == x2 = (x3, y1)
-    | y1 == y2 = (x1, y3)
-    | otherwise = error "WAT"
+computableAM target [x] = step ("is " ++ show target ++ " => " ++ show [x] ++ " equal?") $
+    target == x
+computableAM target (x:rest) = step ("is " ++ show target ++ " => " ++ show (x:rest) ++ " computable?") $
+    computableAM (target - x) rest
+    || (remainder == 0 && computableAM quotient rest)
+    where (quotient, remainder) = (target `divMod` x)
 
-day7  part nums = 0
-day8  part nums = 0
-day9  part nums = 0
-day10 part nums = 0
-day11 part nums = 0
-day12 part nums = 0
-day13 part nums = 0
-day14 part nums = 0
-day15 part nums = 0
-day16 part nums = 0
-day17 part nums = 0
-day18 part nums = 0
-day19 part nums = 0
-day20 part nums = 0
-day21 part nums = 0
-day22 part nums = 0
-day23 part nums = 0
-day24 part nums = 0
-day25 part nums = 0
+day7 Part1 = map parseDay7Line & filter computable & map fst & sum
+    where computable (target, nums) = computableAM target (reverse nums)
+
+day7 Part2 = map parseDay7Line & filter computable & map fst & sum
+    where computable (target, nums) = computableAMC target (reverse nums)
+
+computableAMC target [x] = step ("is " ++ show target ++ " => " ++ show [x] ++ " equal?") $
+    target == x
+computableAMC target (x:rest) = step ("is " ++ show target ++ " => " ++ show (x:rest) ++ " computable?") $
+    computableAMC (target - x) rest
+    || (show x `isSuffixOf` show target) && computableAMC truncated rest
+    || (remainder == 0 && computableAMC quotient rest)
+    where (quotient, remainder) = (target `divMod` x)
+          truncated = (show & take (length (show target) - length (show x)) & step "trying to read" & readMaybe & fromMaybe 0) target
+
+day8  Part1 input = 0
+day9  Part1 input = 0
+day10 Part1 input = 0
+day11 Part1 input = 0
+day12 Part1 input = 0
+day13 Part1 input = 0
+day14 Part1 input = 0
+day15 Part1 input = 0
+day16 Part1 input = 0
+day17 Part1 input = 0
+day18 Part1 input = 0
+day19 Part1 input = 0
+day20 Part1 input = 0
+day21 Part1 input = 0
+day22 Part1 input = 0
+day23 Part1 input = 0
+day24 Part1 input = 0
+day25 Part1 input = 0
+
+debug :: Bool
+debug = False
