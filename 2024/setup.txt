@@ -1,0 +1,3 @@
+# To install Python on Windows:
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+$env:Path = "C:\Users\jeff\.local\bin;$env:Path"
