@@ -36,26 +36,6 @@ data Day = Day1 | Day2 | Day3 | Day4 | Day5
 
 data Part = Part1 | Part2 deriving (Read, Show)
 
-type Coord = (Int, Int)
-instance Num Coord where
-    (x, y) + (a, b) = (x+a, y+b)
-    (x, y) * (a, b) = (x*a, y*b)
-    negate (x, y) = (-x, -y)
-    fromInteger x = (fromInteger x, fromInteger x)
-    signum (x, y) = (signum x, signum y)
-    abs (x, y) = (abs x, abs y)
-taxiDistance :: Coord -> Coord -> Int
-taxiDistance src dest = dx + dy
-    where (dx, dy) = abs (dest - src)
-
-
-
-readDay :: String -> Day
-readDay = read
-
-readPart :: String -> Part
-readPart = read
-
 runDay :: Day -> Part -> [[String]] -> Int
 runDay Day1  = day1
 runDay Day2  = day2
@@ -83,8 +63,32 @@ runDay Day23 = day23
 runDay Day24 = day24
 runDay Day25 = day25
 
+type Coord = (Int, Int)
+instance Num Coord where
+    (x, y) + (a, b) = (x+a, y+b)
+    (x, y) * (a, b) = (x*a, y*b)
+    negate (x, y) = (-x, -y)
+    fromInteger x = (fromInteger x, fromInteger x)
+    signum (x, y) = (signum x, signum y)
+    abs (x, y) = (abs x, abs y)
+taxiDistance :: Coord -> Coord -> Int
+taxiDistance src dest = dx + dy
+    where (dx, dy) = abs (dest - src)
+
 step :: (Show a) => String -> a -> a
 step tag val = if debug then trace (tag ++ ": {{ " ++ show val ++ " }}") val else val
+
+findAll :: Regex -> String -> [[String]]
+findAll pattern input =
+    case matchRegexAll pattern input of
+        Nothing -> []
+        Just (_, _, after, matches) -> matches : findAll pattern after
+
+-- "<>" is "`mappend`", the monoid "add":
+-- rotate n xs = drop n xs ++ take n xs
+-- rotate n = drop n <> take n
+rotate :: [a] -> Int -> [a]
+rotate =  drop <> take
 
 getLines :: IO [[String]]
 getLines = do
@@ -96,45 +100,27 @@ getLines = do
 parseLine ls = filter (not . null) . words $ ls
 
 main :: IO ()
-main = do
-    args <- getArgs
-    let day = readDay (head args)
-    let part = readPart (args !! 1)
-    lines <- getLines
-    print . runDay day part $ lines
+main = getArgs >>= runMain >>= print
+runMain [day, part] = runDay (read day) (read part) <$> getLines
 
 --------------------------------------------------------------
 
 day1 :: Part -> [[String]] -> Int
--- Part 1
-day1 Part1 nums = do
-    let left = step "left" (sort . map (head . map read) $ nums)
-    let right = step "right" (sort . map (last . map read) $ nums)
-    sum $ zipWith (\l r -> abs (l - r)) left right
--- Part 2
-day1 Part2 nums = do
-    let left = step "left" (sort . map (head . map read) $ nums)
-    let right = step "right" (sort . map (last . map read) $ nums)
-    let counts = map (\x -> length . elemIndices x $ right) left
-    sum [x * y | (x, y) <- zip left counts]
+parseDay1 idx = sort . map (idx . map read)
+day1 Part1 nums = sum $ zipWith (\x y -> abs (x - y)) (parseDay1 head nums) (parseDay1 last nums)
+day1 Part2 nums =
+    let right = parseDay1 last nums
+    in sum [x * (length . elemIndices x) right | x <- parseDay1 head nums]
 
 day2 :: Part -> [[String]] -> Int
--- Part 1
 incOrDec xs = (xs == sort xs) || (xs == sortBy (comparing Data.Ord.Down) xs)
-smallDelta [] = True
-smallDelta [_] = True
-smallDelta (x:y:rest) = x /= y && abs (x-y) <= 3 && smallDelta (y:rest)
-day2 Part1 nums = length . filter incOrDec . filter smallDelta . map (map read) $ nums
--- Part 2
-day2 Part2 nums = length . filter (not . null). map (filter incOrDec . filter smallDelta . day2options . map read) $ nums
+smallDelta (x:y:rest) = (x /= y) && (abs (x-y) <= 3) && (smallDelta (y:rest))
+smallDelta _ = True
+
+day2 Part1 = length . filter incOrDec . filter smallDelta . map (map read)
+day2 Part2 = length . filter (not . null). map (filter incOrDec . filter smallDelta . day2options . map read)
+
 day2options xs = [take n xs ++ drop (n+1) xs | n <- [0..(length xs - 1)]]
-
-
-findAll :: Regex -> String -> [[String]]
-findAll pattern input =
-    case matchRegexAll pattern input of
-        Nothing -> []
-        Just (_, _, after, matches) -> matches : findAll pattern after
 
 day3 :: Part -> [[String]] -> Int
 mulRegex = mkRegex "mul\\(([0-9]+),([0-9]+)\\)"
@@ -150,11 +136,6 @@ maybeMul additionEnabled line =
         Just (_, _, after, ["do()", "", "", "", ""]) -> maybeMul True after
         Just (_, _, after, ["", "", mul, x, y]) -> (if additionEnabled then read x * read y else 0) + maybeMul additionEnabled after
         Just (_, _, after, matches) -> trace ("unrecognized case: " ++ show matches) 0
-
--- "<>" is "`mappend`", the monoid "add":
--- rotate n xs = drop n xs ++ take n xs
--- rotate n = drop n <> take n
-rotate =  drop <> take
 
 day4 :: Part -> [[String]] -> Int
 findXmas = length . findAll (mkRegex "(XMAS)")
@@ -366,26 +347,25 @@ parseDay9_ nextFileId pos (fileStr:freeStr:rest) =
 fragment files [] = files
 fragment allFiles@(File fileId fileStart fileSize:files) allFrees@(Free freeStart freeSize:frees) = do
     if fileStart < freeStart
-        then step ("done fragmentging, all free spaces at end (" ++ show allFrees ++ ")") allFiles
+        then allFiles
     else if fileSize < freeSize
-        then fragment (step "defragging smaller file than free to" $ files ++ [File fileId freeStart fileSize]) (step "defragging smaller file than free to" $ Free (freeStart+fileSize) (freeSize-fileSize):frees)
+        then fragment (files ++ [File fileId freeStart fileSize]) (Free (freeStart+fileSize) (freeSize-fileSize):frees)
     else if fileSize == freeSize
-        then fragment (step "defragging equal file and free to" $ files ++ [File fileId freeStart fileSize]) frees
-        else fragment (step "defragging larger file than free to" $ File fileId fileStart (fileSize-freeSize):files ++ [File fileId freeStart freeSize]) frees
+        then fragment (files ++ [File fileId freeStart fileSize]) frees
+    else -- if fileSize > freeSize
+        fragment (File fileId fileStart (fileSize-freeSize):files ++ [File fileId freeStart freeSize]) frees
 
-checksum [] total = total
-checksum (File fileId start size:files) soFar = checksum files (soFar + fileChecksum)
-    where fileChecksum = step ("checksum for file " ++ show fileId) $ sum (zipWith (*) [fileId, fileId..] [start..start+size-1])
+checksum total [] = total
+checksum soFar (File fileId start size:files) = checksum (soFar + fileChecksum) files
+    where fileChecksum = sum (zipWith (*) [fileId, fileId..] [start..start+size-1])
 
 day9 Part1 input = do
-    let (files, free) = step "parsed" $ parseDay9 input
-    let fragmented = step "fragged" $ fragment (reverse files) free
-    checksum fragmented 0
+    let (files, free) = parseDay9 input
+    checksum 0 $ fragment (reverse files) free
 
 day9 Part2 input = do
     let (files, free) = step "parsed" $ parseDay9 input
-    let defragged = step "defragged" $ defrag [] (reverse files) free
-    checksum defragged 0
+    checksum 0 $ defrag [] (reverse files) free
 
 defrag outFiles [] _ = outFiles
 defrag outFiles (file:files) frees =
@@ -403,7 +383,6 @@ fileFit file@(File fileId fileStart fileSize) allFrees@(free@(Free freeStart fre
         then (File fileId freeStart fileSize, frees)
     else -- if fileSize > freeSize
         let (newFile, newFrees) = fileFit file frees in (newFile, free:newFrees)
-
     
 
 day10 Part1 input = 0
