@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 
 module Main where
 
@@ -226,7 +226,7 @@ rightTurn :: (Int, Int) -> (Int, Int)
 rightTurn (0, y) = (negate y, 0)
 rightTurn (x, 0) = (0, x)
 
-between :: Int -> Int -> Int -> Bool
+between :: (Num a, Ord a) => a -> a -> a -> Bool
 between bound1 mid bound2
     | bound1 < mid = mid < bound2
     | bound1 > mid = mid > bound2
@@ -311,7 +311,45 @@ computableAMC target (x:rest) = step ("is " ++ show target ++ " => " ++ show (x:
     where (quotient, remainder) = (target `divMod` x)
           truncated = (show & take (length (show target) - length (show x)) & step "trying to read" & readMaybe & fromMaybe 0) target
 
-day8  Part1 input = 0
+day8 :: Part -> [[String]] -> Int
+parseDay8 :: [[String]] -> (MM.MultiMap Char Coord, Coord)
+parseDay8 lines = do
+    let grid = map head lines
+    let antennae = MM.fromList [(val, (x, y)) | (y, row) <- zip [0..] grid, (x, val) <- zip [0..] row, val /= '.']
+    (antennae, (length (head grid), length grid))
+
+findInterference :: [Coord] -> [Coord]
+findInterference coords = step "interfering" $ L.concat [interfere c1 c2 | c1 <- coords, c2 <- coords, c1 /= c2]
+    where interfere one two = let delta = (two - one) in [one - delta, two + delta]
+
+validLocation :: Coord -> Coord -> Bool
+validLocation (sizeX, sizeY) (x, y) = x >= 0 && y >= 0 && x < sizeX && y < sizeY
+
+day8 Part1 input = do
+    let (antennae, size) = parseDay8 input
+    let locs = (MM.elems & map findInterference & L.concat & filter (validLocation (step "size" size)) & L.nub) antennae
+    length (step "locs" locs)
+
+day8 Part2 input = do
+    let (antennae, size) = parseDay8 input
+    let locs = (MM.elems & map (findInterferencePt2 size) & L.concat & L.nub) antennae
+    length (step "locs" locs)
+
+findInterferencePt2 :: Coord -> [Coord] -> [Coord]
+findInterferencePt2 size coords = step "interfering" $ L.concat [interferePt2 size c1 c2 | c1 <- coords, c2 <- coords, c1 /= c2]
+interferePt2 :: Coord -> Coord -> Coord -> [Coord]
+interferePt2 size one two = do
+    let delta = antennaStep one two
+    let prune = takeWhile (validLocation size)
+    let go x dx = if validLocation size x then (x:go (x+dx) dx) else []
+    go one delta ++ go one (-delta)
+antennaStep :: Coord -> Coord -> Coord
+antennaStep (x1, y1) (x2, y2) = do
+    let dx = x2 - x1
+    let dy = y2 - y1
+    let denom = gcd dx dy
+    (dx `div` denom, dy `div` denom)
+
 day9  Part1 input = 0
 day10 Part1 input = 0
 day11 Part1 input = 0
