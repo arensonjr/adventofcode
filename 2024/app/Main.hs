@@ -5,6 +5,7 @@ module Main where
 import Control.Exception (IOException, catch)
 import Data.List (sort, findIndices, elemIndices, elemIndex, sortBy, isInfixOf, transpose, isPrefixOf, isSuffixOf)
 import Data.List.Split (splitOn)
+import Data.Char (digitToInt)
 import Data.Ord (Down(Down), comparing, Ordering(LT, EQ, GT))
 import Data.Maybe (catMaybes, isJust, isNothing, listToMaybe, fromMaybe)
 import Debug.Trace (trace)
@@ -350,7 +351,61 @@ antennaStep (x1, y1) (x2, y2) = do
     let denom = gcd dx dy
     (dx `div` denom, dy `div` denom)
 
-day9  Part1 input = 0
+day9 :: Part -> [[String]] -> Int
+data Block = File Int Int Int | Free Int Int deriving (Show, Read, Eq)
+parseDay9 :: [[String]] -> ([Block], [Block])
+-- parseDay9 input = ([File 1 0 5, File 2 10 3], [Free 5 6])
+parseDay9 input = parseDay9_ 0 0 (input !! 0 !! 0)
+parseDay9_ nextFileId pos [lastFile] = ([File nextFileId pos (digitToInt lastFile)], [])
+parseDay9_ nextFileId pos (fileStr:freeStr:rest) =
+    let file = digitToInt fileStr
+        free = digitToInt freeStr
+        (files, frees) = parseDay9_ (nextFileId + 1) (pos + file + free) rest
+    in (File nextFileId pos file : files, (Free (pos+file) free:frees))
+
+fragment files [] = files
+fragment allFiles@(File fileId fileStart fileSize:files) allFrees@(Free freeStart freeSize:frees) = do
+    if fileStart < freeStart
+        then step ("done fragmentging, all free spaces at end (" ++ show allFrees ++ ")") allFiles
+    else if fileSize < freeSize
+        then fragment (step "defragging smaller file than free to" $ files ++ [File fileId freeStart fileSize]) (step "defragging smaller file than free to" $ Free (freeStart+fileSize) (freeSize-fileSize):frees)
+    else if fileSize == freeSize
+        then fragment (step "defragging equal file and free to" $ files ++ [File fileId freeStart fileSize]) frees
+        else fragment (step "defragging larger file than free to" $ File fileId fileStart (fileSize-freeSize):files ++ [File fileId freeStart freeSize]) frees
+
+checksum [] total = total
+checksum (File fileId start size:files) soFar = checksum files (soFar + fileChecksum)
+    where fileChecksum = step ("checksum for file " ++ show fileId) $ sum (zipWith (*) [fileId, fileId..] [start..start+size-1])
+
+day9 Part1 input = do
+    let (files, free) = step "parsed" $ parseDay9 input
+    let fragmented = step "fragged" $ fragment (reverse files) free
+    checksum fragmented 0
+
+day9 Part2 input = do
+    let (files, free) = step "parsed" $ parseDay9 input
+    let defragged = step "defragged" $ defrag [] (reverse files) free
+    checksum defragged 0
+
+defrag outFiles [] _ = outFiles
+defrag outFiles (file:files) frees =
+    let (newFile, newFrees) = fileFit file frees
+    in defrag (newFile:outFiles) files newFrees
+
+-- Invariant: Frees stay sorted in ascending order so once we exceed fileStart<freeStart we're done looking
+fileFit file [] = (file, [])
+fileFit file@(File fileId fileStart fileSize) allFrees@(free@(Free freeStart freeSize):frees) =
+    if fileStart < freeStart
+        then (file, allFrees)
+    else if fileSize < freeSize
+        then (File fileId freeStart fileSize, (Free (freeStart+fileSize) (freeSize-fileSize)):frees)
+    else if fileSize == freeSize
+        then (File fileId freeStart fileSize, frees)
+    else -- if fileSize > freeSize
+        let (newFile, newFrees) = fileFit file frees in (newFile, free:newFrees)
+
+    
+
 day10 Part1 input = 0
 day11 Part1 input = 0
 day12 Part1 input = 0
