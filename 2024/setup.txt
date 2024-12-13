@@ -2,3 +2,5 @@
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 $env:Path = "C:\Users\jeff\.local\bin;$env:Path"
 uv python install 3.13
+uv venv
+uv pip install networkx
