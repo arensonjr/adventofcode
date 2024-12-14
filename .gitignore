@@ -2,5 +2,7 @@
 **/*.hi
 **/*.o
 **/*.exe
+**/*.class
+**/META-INF/**/*
 
 **/dist-newstyle/*

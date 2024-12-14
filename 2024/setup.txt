@@ -4,3 +4,9 @@ $env:Path = "C:\Users\jeff\.local\bin;$env:Path"
 uv python install 3.13
 uv venv
 uv pip install networkx
+
+# To install Kotlin:
+# download from https://github.com/JetBrains/kotlin/releases/
+
+# To install Rust:
+# download from https://www.rust-lang.org/tools/install
