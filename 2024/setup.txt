@@ -7,6 +7,7 @@ uv pip install networkx
 
 # To install Kotlin:
 # download from https://github.com/JetBrains/kotlin/releases/
+$env:Path = "E:\InstalledPrograms\kotlinc\bin;$env:Path"
 
 # To install Rust:
 # download from https://www.rust-lang.org/tools/install

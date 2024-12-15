@@ -4,5 +4,7 @@
 **/*.exe
 **/*.class
 **/META-INF/**/*
+**/target/**/*
+**/__pycache__/**/*
 
 **/dist-newstyle/*

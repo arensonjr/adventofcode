@@ -7,6 +7,146 @@ import re
 import sys
 import time
 
+import grid
+
+######################################################################
+
+class Day15Grid(grid.Grid):
+    def TODO(self):
+        pass
+
+def day15_part1(lines:list[str]):
+    # Parse
+    empty = lines.index("")
+    room = grid.Grid(lines[:empty])
+    moves = list(map(grid.Vector.from_arrow, ''.join(lines[empty+1:])))
+
+    # Simulate
+    robot = room.find('@')[0]
+    for move_num, move in enumerate(moves):
+        whats_up = room.in_front_of(robot, move, until='#')
+        # Is there any space to move boxes? (if not, happily no-op into a wall)
+        empties = [pos for (pos, val) in whats_up if val == '.']
+        debug(f'{robot=} facing {move}: {whats_up=} -> {empties=}')
+        if empties:
+            # If so, everything shifts to the next empty space in order
+            shift_me = robot.through(empties[0])
+            debug(f'Shifting to first empty: {shift_me=}')
+            for i in range(len(shift_me)-1, 0, -1):
+                debug(f'  | -> set {shift_me[i]} to {shift_me[i-1]}')
+                room[shift_me[i]] = room[shift_me[i-1]]
+            debug(f'  \\ -> and finally, set {shift_me[0]} to empty')
+            room[shift_me[0]] = '.'
+            robot = robot.shift(move)
+        else:
+            debug(f'No empty space found')
+
+
+        
+        debug(f'After move {move_num}:\n{room.pretty()}\n')
+
+    # Compute
+    debug(f'After all moves complete:\n{room.pretty()}')
+    return sum([100*p.y + p.x for p in room.find('O')])
+
+def day15_part2(lines:list[str]):
+    # Parse
+    empty = lines.index("")
+    double = {'O': '[]', '@': '@.', '#': '##', '.': '..'}
+    room = grid.Grid([''.join(map(double.get, line)) for line in lines[:empty]])
+    moves = list(map(grid.Vector.from_arrow, ''.join(lines[empty+1:])))
+
+    # Simulate
+    robot = room.find('@')[0]
+    for move in moves:
+        whats_up = room.in_front_of(robot, move, until='#')
+
+        # If we're moving vertically, any boxes in the way also need to be
+        # pushed along BOTH columns, which makes this way more complicated than
+        # a horizontal move would be.
+        if move in {grid.UP, grid.DOWN}:
+            move_cols = {robot.x}
+            y = robot.y
+
+            # Try pushing in this direction until we reach a thing we can't push.
+            # If it works, replace our current room with the hypothetical room.
+            # If not, discard it and continue.
+            # next_room = room.copy()
+            next_room = {}
+            next_room[robot] = '.'
+            found_all_empty = False
+            found_wall = False
+            while not (found_all_empty or found_wall):
+                next_y = y + move.dy
+                next_row = {grid.Pos(x, next_y) for x in move_cols}
+
+                # Augment with all of the box-halves that we collect
+                unmatched_left = {
+                    right for pos in next_row
+                    if room[pos] == '[' and (right := pos.shift(grid.RIGHT)) not in next_row
+                }
+                unmatched_right = {
+                    left for pos in next_row
+                    if room[pos] == ']' and (left := pos.shift(grid.LEFT)) not in next_row
+                }
+                next_row = next_row.union(unmatched_left).union(unmatched_right)
+
+                # Stop if any of the boxes we have to move would hit any wall
+                if any(room[pos] == '#' for pos in next_row):
+                    found_wall = True
+                    break
+
+                # We've established there's space for everything, so move the
+                # current row into the next row
+                for pos in next_row:
+                    # Move the old thing into the new space, but if it's a box
+                    # we newly picked up, then there was no "moved from" -- it
+                    # just creates a vacuum where it used to be.
+                    if pos.x in move_cols:
+                        next_room[pos] = room[pos.shift(move.reverse())]
+                    else:
+                        next_room[pos] = '.'
+
+                # Stop if everything moved into empty space
+                if all(room[pos] == '.' for pos in next_row):
+                    found_all_empty = True
+                    break
+
+                # Update which columns we have to move next time
+                move_cols = {pos.x for pos in next_row if room[pos] != '.'}
+                y = next_y
+
+            if found_all_empty:
+                robot = robot.shift(move)
+                for pos, val in next_room.items():
+                    room[pos] = val
+            elif found_wall:
+                # This means we failed to move, so don't use the temp locations
+                # that we calculated earlier
+                pass
+            else:
+                raise AssertionError('Somehow I did not find an empty row NOR walls!')
+
+        else:
+            # Otherwise, just do a normal move.
+            empties = [pos for (pos, val) in whats_up if val == '.']
+            if empties:
+                shift_me = robot.through(empties[0])
+                for i in range(len(shift_me)-1, 0, -1):
+                    room[shift_me[i]] = room[shift_me[i-1]]
+                # And finally, upkeep on the robot's old position
+                room[shift_me[0]] = '.'
+                robot = robot.shift(move)
+
+        # As it turns out, printing out the whole room is REALLY slow,
+        # and f-strings eagerly evaluate so `room.pretty()` runs every
+        # time, even if debugging is off.
+        # debug(f'After move {move_num}:\n{room.pretty()}\n')
+
+    # Compute
+    # debug(f'After all moves complete:\n{room.pretty()}\n')
+    return sum([100*p.y + p.x for p in room.find('[')])
+
 ######################################################################
 
 def day13_part1(lines): return day13(lines, 0)

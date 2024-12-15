@@ -2,8 +2,7 @@ $day=$args[0]
 $part=$args[1]
 $inp=$args[2]
 
-$debug=$args[3]
-if ([string]::IsNullOrWhiteSpace($debug)) {
+if ([string]::IsNullOrWhiteSpace($args[3])) {
     $debug="False"
 } else {
     $debug="True"
@@ -19,10 +18,18 @@ if ([string]::IsNullOrWhiteSpace($debug)) {
 # Get-Content .\day${day}_${inp}.txt | cabal run x2024 -- Day${day} Part${part}
 
 ########## Python
-# uv run aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
+# uv run -m cProfile aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
+uv run aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
 
 ########## Kotlin
-write-host "Compiling..."
-kotlinc aoc.kt
-write-host "Running..."
-kotlin AocKt day${day} part${part} "day${day}_${inp}.txt" $debug
+# write-host "Compiling..."
+# kotlinc aoc.kt
+# write-host "Running..."
+# kotlin AocKt day${day} part${part} "day${day}_${inp}.txt" $debug
+
+########## Rust
+# if ([string]::IsNullOrWhiteSpace($args[3])) {
+#     cargo run -- "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
+# } else {
+#     cargo run --release -- "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
+# }
