@@ -7,43 +7,36 @@ import re
 import sys
 import time
 
-import grid
+from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
 
 ######################################################################
 
-class Day15Grid(grid.Grid):
+class Day15Grid(Grid):
     def TODO(self):
         pass
 
 def day15_part1(lines:list[str]):
     # Parse
     empty = lines.index("")
-    room = grid.Grid(lines[:empty])
-    moves = list(map(grid.Vector.from_arrow, ''.join(lines[empty+1:])))
+    room = Grid(lines[:empty])
+    moves = list(map(Vector.from_arrow, ''.join(lines[empty+1:])))
 
     # Simulate
     robot = room.find('@')[0]
-    for move_num, move in enumerate(moves):
+    for move in enumerate(moves):
         whats_up = room.in_front_of(robot, move, until='#')
         # Is there any space to move boxes? (if not, happily no-op into a wall)
         empties = [pos for (pos, val) in whats_up if val == '.']
         debug(f'{robot=} facing {move}: {whats_up=} -> {empties=}')
         if empties:
             # If so, everything shifts to the next empty space in order
-            shift_me = robot.through(empties[0])
-            debug(f'Shifting to first empty: {shift_me=}')
-            for i in range(len(shift_me)-1, 0, -1):
-                debug(f'  | -> set {shift_me[i]} to {shift_me[i-1]}')
-                room[shift_me[i]] = room[shift_me[i-1]]
-            debug(f'  \\ -> and finally, set {shift_me[0]} to empty')
-            room[shift_me[0]] = '.'
-            robot = robot.shift(move)
+            for distance in range(robot.taxicab(empties[0]), 0, -1):
+                room[robot + move*distance] = room[robot + move*(distance-1)]
+            # And finally, upkeep on the robot's old position
+            room[robot] = '.'
+            robot += move
         else:
             debug(f'No empty space found')
-
-
-        
-        debug(f'After move {move_num}:\n{room.pretty()}\n')
 
     # Compute
     debug(f'After all moves complete:\n{room.pretty()}')
@@ -53,8 +46,8 @@ def day15_part2(lines:list[str]):
     # Parse
     empty = lines.index("")
     double = {'O': '[]', '@': '@.', '#': '##', '.': '..'}
-    room = grid.Grid([''.join(map(double.get, line)) for line in lines[:empty]])
-    moves = list(map(grid.Vector.from_arrow, ''.join(lines[empty+1:])))
+    room = Grid([''.join(map(double.get, line)) for line in lines[:empty]])
+    moves = list(map(Vector.from_arrow, ''.join(lines[empty+1:])))
 
     # Simulate
     robot = room.find('@')[0]
@@ -64,7 +57,7 @@ def day15_part2(lines:list[str]):
         # If we're moving vertically, any boxes in the way also need to be
         # pushed along BOTH columns, which makes this way more complicated than
         # a horizontal move would be.
-        if move in {grid.UP, grid.DOWN}:
+        if move in {UP, DOWN}:
             move_cols = {robot.x}
             y = robot.y
 
@@ -78,16 +71,16 @@ def day15_part2(lines:list[str]):
             found_wall = False
             while not (found_all_empty or found_wall):
                 next_y = y + move.dy
-                next_row = {grid.Pos(x, next_y) for x in move_cols}
+                next_row = {Pos(x, next_y) for x in move_cols}
 
                 # Augment with all of the box-halves that we collect
                 unmatched_left = {
                     right for pos in next_row
-                    if room[pos] == '[' and (right := pos.shift(grid.RIGHT)) not in next_row
+                    if room[pos] == '[' and (right := pos + RIGHT) not in next_row
                 }
                 unmatched_right = {
                     left for pos in next_row
-                    if room[pos] == ']' and (left := pos.shift(grid.LEFT)) not in next_row
+                    if room[pos] == ']' and (left := pos + LEFT) not in next_row
                 }
                 next_row = next_row.union(unmatched_left).union(unmatched_right)
 
@@ -103,7 +96,7 @@ def day15_part2(lines:list[str]):
                     # we newly picked up, then there was no "moved from" -- it
                     # just creates a vacuum where it used to be.
                     if pos.x in move_cols:
-                        next_room[pos] = room[pos.shift(move.reverse())]
+                        next_room[pos] = room[pos - move]
                     else:
                         next_room[pos] = '.'
 
@@ -117,7 +110,7 @@ def day15_part2(lines:list[str]):
                 y = next_y
 
             if found_all_empty:
-                robot = robot.shift(move)
+                robot = robot + move
                 for pos, val in next_room.items():
                     room[pos] = val
             elif found_wall:
@@ -131,12 +124,11 @@ def day15_part2(lines:list[str]):
             # Otherwise, just do a normal move.
             empties = [pos for (pos, val) in whats_up if val == '.']
             if empties:
-                shift_me = robot.through(empties[0])
-                for i in range(len(shift_me)-1, 0, -1):
-                    room[shift_me[i]] = room[shift_me[i-1]]
+                for distance in range(robot.taxicab(empties[0]), 0, -1):
+                    room[robot + move*distance] = room[robot + move*(distance-1)]
                 # And finally, upkeep on the robot's old position
-                room[shift_me[0]] = '.'
-                robot = robot.shift(move)
+                room[robot] = '.'
+                robot += move
 
         # As it turns out, printing out the whole room is REALLY slow,
         # and f-strings eagerly evaluate so `room.pretty()` runs every
@@ -144,7 +136,7 @@ def day15_part2(lines:list[str]):
         # debug(f'After move {move_num}:\n{room.pretty()}\n')
 
     # Compute
-    # debug(f'After all moves complete:\n{room.pretty()}\n')
+    debug(f'After all moves complete:\n{room.pretty()}\n')
     return sum([100*p.y + p.x for p in room.find('[')])
 
 ######################################################################

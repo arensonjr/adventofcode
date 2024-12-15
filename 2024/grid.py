@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import dataclasses
 import networkx
 
 class Grid(abc.ABC):
@@ -71,17 +72,11 @@ class Grid(abc.ABC):
     def copy(self):
         return Grid(_height=self.height, _width=self.width, _grid=self.grid.copy())
 
+@dataclasses.dataclass(frozen=True)
 class Vector(object):
     """Vector represented by {-1, 0, 1} for movement along each axis."""
-    def __init__(self, dx:int=0, dy:int=0):
-        self._dx = dx
-        self._dy = dy
-
-    @property
-    def dx(self): return self._dx
-
-    @property
-    def dy(self): return self._dy
+    dx : int
+    dy : int
 
     @staticmethod
     def from_arrow(arrow:str) -> Vector:
@@ -95,6 +90,23 @@ class Vector(object):
     def scale(self, factor:int) -> Vector:
         return Vector(dx=self.dx*factor, dy=self.dy*factor)
 
+    def __mul__(self, factor:int) -> Vector:
+        return self.scale(factor)
+
+    def __floordiv__(self, factor:int) -> Vector:
+        return Vector(self.dx // factor, self.dy // factor)
+
+    def __neg__(self) -> Vector:
+        return self.reverse()
+
+    def __add__(self, other) -> Pos:
+        match other:
+            case Pos(x, y): return Pos(self.x + x, self.y + y)
+            case Vector(dx, dy): return Pos(self.x + dx, self.y + dy)
+
+    def __sub__(self, other) -> Vector:
+        return self + (-other)
+
     def reverse(self):
         if self == UP: return DOWN
         elif self == DOWN: return UP
@@ -105,31 +117,36 @@ class Vector(object):
     def __repr__(self):
         return f'Vector({self.dx},{self.dy})'
 
+@dataclasses.dataclass(frozen=True)
 class Pos(object):
     """Individual position in a grid."""
-    def __init__(self, x:int, y:int):
-        self._x = x
-        self._y = y
-
-    def __eq__(self, other:Pos) -> bool:
-        return self.x == other.x and self.y == other.y
-
-    def __hash__(self) -> int:
-        return self.x * 10000 + self.y
-
-    @property
-    def x(self):
-        return self._x
-    
-    @property
-    def y(self):
-        return self._y
+    x : int
+    y : int
 
     def adjacents(self) -> list[int]:
         return [self.shift(vec) for vec in DIRECTIONS]
 
     def shift(self, vec:Vector) -> Pos:
         return Pos(self.x + vec.dx, self.y + vec.dy) 
+
+    def __neg__(self) -> Pos:
+        return Pos(-self.x, -self.y)
+
+    def __add__(self, other) -> Pos:
+        match other:
+            case Pos(x, y): return Pos(self.x + x, self.y + y)
+            case Vector(dx, dy): return Pos(self.x + dx, self.y + dy)
+
+    def __sub__(self, other):
+        match other:
+            case Pos(x, y): return Vector(self.x - x, self.y - y)
+            case Vector(dx, dy): return Pos(self.x - dx, self.y - dy)
+            case otherwise: raise ValueError(f"Can't subtract {self} and {other}")
+
+    def vector_to(self, other:Pos) -> Vector:
+        """TODO: This assumes they're colinear but might be wrong otherwise. Probably good enough for AOC."""
+        distance = self.taxicab(other)
+        return Vector((other.x - self.x) // distance, (other.y - self.y) // distance)
 
     def taxicab(self, other:Pos) -> int:
         return abs(self.x - other.x) + abs(self.y - other.y)
@@ -143,14 +160,12 @@ class Pos(object):
         e.g.:
           Pos(1, 2).between(Pos(5, 2)) -> [(1,2), (2,2), (3,2), (4,2), (5,2)]
         """
-        if other.x == self.x:
-            direction = 1 if self.y < other.y else -1
-            return [Pos(self.x, y) for y in range(self.y, other.y + direction, direction)]
-        elif other.y == self.y:
-            direction = 1 if self.x < other.x else -1
-            return [Pos(x, self.y) for x in range(self.x, other.x + direction, direction)]
-        else:
+        if not (self.x == other.x or self.y == other.y):
             raise ValueError(f'Points {self} and {other} are not in line with each other')
+
+        distance = self.taxicab(other)
+        direction = (other-self) // distance
+        return [self + direction*i for i in range(0, distance+1)]
 
 UP = Vector(dx=0, dy=-1)
 DOWN = Vector(dx=0, dy=1)
