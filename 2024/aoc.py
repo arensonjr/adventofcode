@@ -229,7 +229,6 @@ def day12(lines, perim_func):
     grid = {(x, y): lines[y][x] for x in range(width) for y in range(height)}
 
     # Compute
-    # regions = split_crops(grid)
     regions = split_crops(lines)
     region_summaries = [(len(region), perim_func(region), grid[region.pop()]) for region in regions]
     debug(f'{region_summaries=}')
@@ -264,84 +263,120 @@ def day11(lines, iterations):
 
 def day6_part2(lines):
     # Parse input
-    height = len(lines)
-    width = len(lines[0])
-    boxes = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '#']
-    start = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '^'][0]
-    candidate_boxes = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '.']
+    grid = Grid(lines)
+    start = grid.find('^')[0]
 
-    boxes_by_y = collections.defaultdict(list)
-    boxes_by_x = collections.defaultdict(list)
-    for (x, y) in boxes:
-        boxes_by_y[y].append(x)
-        boxes_by_x[x].append(y)
-
-    # Traverse
     looped = []
-    for new_box in candidate_boxes:
-        debug(f'Trying with a box at {new_box}...')
-        boxes.append(new_box)
-        boxes_by_y[new_box[1]].append(new_box[0])
-        boxes_by_x[new_box[0]].append(new_box[1])
-
-        if does_it_loop(width, height, boxes, boxes_by_y, boxes_by_x, start):
-            debug('  -> Box LOOPED :)')
+    for i, new_box in enumerate(grid.find('.')):
+        grid[new_box] = '#'
+        if does_it_loop2(grid, start):
             looped.append(new_box)
-        else:
-            debug('  -> Box exited')
+        grid[new_box] = '.'
+        debug(f'Checked box {i} / {len(grid.find('.'))}')
 
-        boxes.pop()
-        boxes_by_y[new_box[1]].pop()
-        boxes_by_x[new_box[0]].pop()
-
-
-    debug(f'{looped=}')
     return len(looped)
 
-def does_it_loop(width, height, boxes, boxes_by_y, boxes_by_x, start):
-    """Returns true if the guard loops, false otherwise."""
-    (dx, dy) = (0, -1) # up
+def does_it_loop2(grid:Grid, start:Pos) -> bool:
     visited = set()
-    (x, y) = start
-
+    vector = UP
+    pos = start
     while True:
-        try:
-            (boxX, boxY) = find_next_box(boxes_by_y, boxes_by_x, (x, y), (dx, dy))
-        except:
-            # No next box found --> off the edge of the map
-            debug(f'  No box found for {(x, y)} at vector {(dx, dy)} - must have exited the map')
-            return False
+        sightline = grid.in_front_of(pos, vector, until='#')
+        if sightline:
+            # Have we reached the edge without hitting a box?
+            if sightline[-1][0] + vector not in grid:
+                return False # (a.k.a. no loop)
+            # Otherwise, move forward
+            pos = sightline[-1][0]
 
-        (x, y) = (boxX - dx, boxY - dy)
-        (dx, dy) = turn_right((dx, dy))
-        if ((x, y), (dx, dy)) in visited:
-            debug(f'  Already seen {(x,y)} at vector {(dx, dy)}, must have looped')
-            return True # Looped
-        visited.add(((x, y), (dx, dy)))
+        vector = vector.turn(RIGHT)
+        # Loop check!
+        if (pos, vector) in visited:
+            return True
+        visited.add((pos, vector))
 
 
-def turn_right(vector):
-    match vector:
-        case (0, dy): return (-dy, 0)
-        case (dx, 0): return (0, dx)
 
-def find_next_box(boxes_by_y, boxes_by_x, pos, vector):
-    (x, y) = pos
-    (dx, dy) = vector
-    # debug(f'  ({boxes_by_y=}, {boxes_by_x=})')
+#### Well, this was the old version, which is much more complicated but also ~40x faster
 
-    match vector:
-        case (0, dy):
-            candidate_boxes = boxes_by_x[x]
-            (start, dir) = (y, dy)
-        case (dx, 0):
-            candidate_boxes = boxes_by_y[y]
-            (start, dir) = (x, dx)
+#     height = len(lines)
+#     width = len(lines[0])
+#     boxes = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '#']
+#     start = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '^'][0]
+#     candidate_boxes = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '.']
+
+#     boxes_by_y = collections.defaultdict(list)
+#     boxes_by_x = collections.defaultdict(list)
+#     for (x, y) in boxes:
+#         boxes_by_y[y].append(x)
+#         boxes_by_x[x].append(y)
+
+#     # Traverse
+#     looped = []
+#     for new_box in candidate_boxes:
+#         debug(f'Trying with a box at {new_box}...')
+#         boxes.append(new_box)
+#         boxes_by_y[new_box[1]].append(new_box[0])
+#         boxes_by_x[new_box[0]].append(new_box[1])
+
+#         if does_it_loop(width, height, boxes, boxes_by_y, boxes_by_x, start):
+#             debug('  -> Box LOOPED :)')
+#             looped.append(new_box)
+#         else:
+#             debug('  -> Box exited')
+
+#         boxes.pop()
+#         boxes_by_y[new_box[1]].pop()
+#         boxes_by_x[new_box[0]].pop()
+
+
+#     debug(f'{looped=}')
+#     return len(looped)
+
+# def does_it_loop(width, height, boxes, boxes_by_y, boxes_by_x, start):
+#     """Returns true if the guard loops, false otherwise."""
+#     (dx, dy) = (0, -1) # up
+#     visited = set()
+#     (x, y) = start
+
+#     while True:
+#         try:
+#             (boxX, boxY) = find_next_box(boxes_by_y, boxes_by_x, (x, y), (dx, dy))
+#         except:
+#             # No next box found --> off the edge of the map
+#             debug(f'  No box found for {(x, y)} at vector {(dx, dy)} - must have exited the map')
+#             return False
+
+#         (x, y) = (boxX - dx, boxY - dy)
+#         (dx, dy) = turn_right((dx, dy))
+#         if ((x, y), (dx, dy)) in visited:
+#             debug(f'  Already seen {(x,y)} at vector {(dx, dy)}, must have looped')
+#             return True # Looped
+#         visited.add(((x, y), (dx, dy)))
+
+
+# def turn_right(vector):
+#     match vector:
+#         case (0, dy): return (-dy, 0)
+#         case (dx, 0): return (0, dx)
+
+# def find_next_box(boxes_by_y, boxes_by_x, pos, vector):
+#     (x, y) = pos
+#     (dx, dy) = vector
+#     # debug(f'  ({boxes_by_y=}, {boxes_by_x=})')
+
+#     match vector:
+#         case (0, dy):
+#             candidate_boxes = boxes_by_x[x]
+#             (start, dir) = (y, dy)
+#         case (dx, 0):
+#             candidate_boxes = boxes_by_y[y]
+#             (start, dir) = (x, dx)
     
-    candidate_boxes = list(filter(lambda box: box < start if dir < 0 else box > start, candidate_boxes))
-    next_box = min(candidate_boxes, key=lambda box: abs(box-start))
-    debug(f'  Walking from {pos} by {vector}, possible boxes are {list(candidate_boxes)} and I chose {next_box}')
-    return (x, next_box) if dx == 0 else (next_box, y)
+#     candidate_boxes = list(filter(lambda box: box < start if dir < 0 else box > start, candidate_boxes))
+#     next_box = min(candidate_boxes, key=lambda box: abs(box-start))
+#     debug(f'  Walking from {pos} by {vector}, possible boxes are {list(candidate_boxes)} and I chose {next_box}')
+#     return (x, next_box) if dx == 0 else (next_box, y)
 
 ######################################################################
 

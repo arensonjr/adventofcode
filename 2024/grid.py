@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import dataclasses
 import networkx
+import unpackable
 
 class Grid(abc.ABC):
     """Grid of space for Advent of Code.
@@ -22,8 +23,11 @@ class Grid(abc.ABC):
         self.grid = networkx.Graph()
         for x in range(self.width):
             for y in range(self.height):
+                self.grid.add_node(Pos(x, y), val=lines[y][x])
+
+        for x in range(self.width):
+            for y in range(self.height):
                 p = Pos(x, y)
-                self.grid.add_node(p, val=lines[y][x])
                 for other in self.neighbors(p):
                     self.grid.add_edge(p, other)
 
@@ -52,20 +56,20 @@ class Grid(abc.ABC):
         return 0 <= pos.x < self.width and 0 <= pos.y < self.height
 
     def regions(self):
-        return networkx.connected_components(self.grid)
+        return list(networkx.connected_components(self.grid))
 
     def in_front_of(self, pos:Pos, vec:Vector, until=None) -> list[(Pos, str)]:
         """Returns the grid values if you were to stand at `pos` and face in the `vec` direction.
         
         If `until` is provided, this stops before finding one of those values."""
         line = []
-        while (pos := pos.shift(vec)) in self and self[pos] != until:
+        while (pos := pos + vec) in self and self[pos] != until:
             line.append((pos, self[pos]))
         return line
 
     def pretty(self):
         return '\n'.join(
-            ''.join(self[Pos(x, y)] for x in range(self.width)) + f' {y}'
+            ''.join(self[Pos(x, ygg)] for x in range(self.width)) + f' {y}'
             for y in range(self.height)
         ) + '\n' + ''.join(str(x % 10) for x in range(self.width))
 
@@ -73,7 +77,7 @@ class Grid(abc.ABC):
         return Grid(_height=self.height, _width=self.width, _grid=self.grid.copy())
 
 @dataclasses.dataclass(frozen=True)
-class Vector(object):
+class Vector(unpackable.Unpackable):
     """Vector represented by {-1, 0, 1} for movement along each axis."""
     dx : int
     dy : int
@@ -114,11 +118,16 @@ class Vector(object):
         elif self == RIGHT: return LEFT
         else: return Vector(dx=-1*self.dx, dy=-1*self.dy)
 
+    def turn(self, dir):
+        if dir == LEFT: return Vector(self.dy, -self.dx)
+        if dir == RIGHT: return Vector(-self.dy, self.dx)
+        else: raise ValueError("Can't turn {dir}")
+
     def __repr__(self):
         return f'Vector({self.dx},{self.dy})'
 
 @dataclasses.dataclass(frozen=True)
-class Pos(object):
+class Pos(unpackable.Unpackable):
     """Individual position in a grid."""
     x : int
     y : int
