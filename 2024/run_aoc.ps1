@@ -19,7 +19,7 @@ if ([string]::IsNullOrWhiteSpace($args[3])) {
 
 ########## Python
 # uv run -m cProfile aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
-uv run aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
+# uv run aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
 
 ########## Kotlin
 # write-host "Compiling..."
@@ -28,8 +28,8 @@ uv run aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
 # kotlin AocKt day${day} part${part} "day${day}_${inp}.txt" $debug
 
 ########## Rust
-# if ([string]::IsNullOrWhiteSpace($args[3])) {
-#     cargo run -- "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
-# } else {
-#     cargo run --release -- "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
-# }
+if ([string]::IsNullOrWhiteSpace($args[3])) {
+    cargo run --release -- "day${day}_part${part}" "day${day}_${inp}.txt"
+} else {
+    cargo run -- "day${day}_part${part}" "day${day}_${inp}.txt"
+}
