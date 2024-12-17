@@ -1,6 +1,8 @@
 import collections
 import datetime
 import functools
+import heapq
+import math
 import networkx
 import os
 import re
@@ -11,9 +13,82 @@ from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
 
 ######################################################################
 
-class Day15Grid(Grid):
-    def TODO(self):
-        pass
+class Day16Grid(Grid):
+    def is_neighbor(self, x, y):
+        return super().is_neighbor(x, y) and self[x] != '#' and self[y] != '#'
+
+def day16_dijkstra(grid, start, end):
+    queue = []
+    costs = collections.defaultdict(lambda: math.inf)
+    all_paths = collections.defaultdict(set)
+    heapq.heappush(queue, (0, (start, RIGHT, {start})))
+    while queue:
+        (cost, (pos, dir, path)) = heapq.heappop(queue)
+        debug(f'POLLED {(cost, pos, dir)=}')
+
+        # Update the cost of facing each direction at this spot
+        all_worse_costs = True
+        new_cost = {}
+        for new_dir, delta in [(dir, 0), (dir.turn(LEFT), 1000), (dir.turn(RIGHT), 1000), (dir.reverse(), 2000)]:
+            new_cost[new_dir] = cost + delta
+        for new_dir in new_cost:
+            if new_cost[new_dir] <= costs[(pos, new_dir)]:
+                all_worse_costs = False
+                debug(f'  |- updated cost of {pos} facing {new_dir} to {costs[(pos, new_dir)]} -> {new_cost[new_dir]}')
+                costs[(pos, new_dir)] = new_cost[new_dir]
+                all_paths[(pos, new_dir)].update(path)
+            else:
+                debug(f'  |- cost of walking to {pos} facing {new_dir} is {new_cost[new_dir]} > {costs[(pos, new_dir)]}')
+
+        if all_worse_costs:
+             debug(f'  \\--> (discarding {pos}, new costs are all greater than existing costs')
+             continue
+
+        if pos == end:
+            # Find all other possible paths that would've gotten here
+            while (other := heapq.heappop(queue))[0] == cost:
+                (_, (opos, _, opath)) = other
+                if opos == end:
+                    path.update(opath)
+            return (cost, path)
+
+
+        # If not at the end, add all neighbors to the queue
+        for (_, nbr) in grid.neighbors(pos):
+            new_dir = nbr - pos
+            debug(f'  |- enqueueing {nbr} with new cost {new_cost[new_dir] + 1}')
+            heapq.heappush(queue, (new_cost[new_dir] + 1, (nbr, new_dir, all_paths[(pos, new_dir)].union({nbr}))))
+
+        # if DEBUG:
+        #     sys.stdin.readline()
+
+def day16_part1(lines):
+    # Parse input
+    grid = Day16Grid(lines)
+    start = grid.find('S')[0]
+    end = grid.find('E')[0]
+
+    # Dijkstra from start to end
+    cost, _ = day16_dijkstra(grid, start, end)
+    return cost
+
+def day16_part2(lines):
+    # Parse input
+    grid = Day16Grid(lines)
+    start = grid.find('S')[0]
+    end = grid.find('E')[0]
+
+    # Dijkstra from start to end
+    cost, visited = day16_dijkstra(grid, start, end)
+
+    if DEBUG:
+        debug(f'\nFinal visited ({len(visited)}):\n{visited}')
+        for pos in visited:
+            grid[pos] = 'O'
+        debug(f'\nOn the grid:\n{grid.pretty()}\n')
+    return len(visited)
+
+######################################################################
 
 def day15_part1(lines:list[str]):
     # Parse
@@ -51,7 +126,7 @@ def day15_part2(lines:list[str]):
 
     # Simulate
     robot = room.find('@')[0]
-    for move in moves:
+    for move_num, move in enumerate(moves):
         whats_up = room.in_front_of(robot, move, until='#')
 
         # If we're moving vertically, any boxes in the way also need to be
@@ -133,7 +208,8 @@ def day15_part2(lines:list[str]):
         # As it turns out, printing out the whole room is REALLY slow,
         # and f-strings eagerly evaluate so `room.pretty()` runs every
         # time, even if debugging is off.
-        # debug(f'After move {move_num}:\n{room.pretty()}\n')
+        if DEBUG:
+            debug(f'After move {move_num}:\n{room.pretty()}\n')
 
     # Compute
     debug(f'After all moves complete:\n{room.pretty()}\n')

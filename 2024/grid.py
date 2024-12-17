@@ -28,7 +28,7 @@ class Grid(abc.ABC):
         for x in range(self.width):
             for y in range(self.height):
                 p = Pos(x, y)
-                for other in self.neighbors(p):
+                for other in [o for o in p.adjacents() if self.is_neighbor(p, o)]:
                     self.grid.add_edge(p, other)
 
     @property
@@ -50,7 +50,7 @@ class Grid(abc.ABC):
         return pos1 in self and pos2 in self and pos1.taxicab(pos2) == 1
 
     def neighbors(self, pos):
-        return [other for other in pos.adjacents() if self.is_neighbor(pos, other)]
+        return self.grid.edges(pos)
 
     def __contains__(self, pos:Pos) -> bool:
         return 0 <= pos.x < self.width and 0 <= pos.y < self.height
@@ -69,7 +69,7 @@ class Grid(abc.ABC):
 
     def pretty(self):
         return '\n'.join(
-            ''.join(self[Pos(x, ygg)] for x in range(self.width)) + f' {y}'
+            ''.join(self[Pos(x, y)] for x in range(self.width)) + f' {y}'
             for y in range(self.height)
         ) + '\n' + ''.join(str(x % 10) for x in range(self.width))
 
@@ -111,6 +111,9 @@ class Vector(unpackable.Unpackable):
     def __sub__(self, other) -> Vector:
         return self + (-other)
 
+    def __lt__(self, other:Vector):
+        return (self.dx, self.dy) < (other.dx, other.dy)
+
     def reverse(self):
         if self == UP: return DOWN
         elif self == DOWN: return UP
@@ -151,6 +154,9 @@ class Pos(unpackable.Unpackable):
             case Pos(x, y): return Vector(self.x - x, self.y - y)
             case Vector(dx, dy): return Pos(self.x - dx, self.y - dy)
             case otherwise: raise ValueError(f"Can't subtract {self} and {other}")
+
+    def __lt__(self, other:Pos):
+        return (self.x, self.y) < (other.x, other.y)
 
     def vector_to(self, other:Pos) -> Vector:
         """TODO: This assumes they're colinear but might be wrong otherwise. Probably good enough for AOC."""
