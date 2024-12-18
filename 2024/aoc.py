@@ -57,7 +57,9 @@ def day16_dijkstra(grid, start, end):
         for (_, nbr) in grid.neighbors(pos):
             new_dir = nbr - pos
             debug(f'  |- enqueueing {nbr} with new cost {new_cost[new_dir] + 1}')
-            heapq.heappush(queue, (new_cost[new_dir] + 1, (nbr, new_dir, all_paths[(pos, new_dir)].union({nbr}))))
+            next_cost = new_cost[new_dir] + 1
+            new_paths = all_paths[(pos, dir)].union({nbr})
+            heapq.heappush(queue, (next_cost, (nbr, new_dir, new_paths)))
 
         # if DEBUG:
         #     sys.stdin.readline()
@@ -342,117 +344,61 @@ def day6_part2(lines):
     grid = Grid(lines)
     start = grid.find('^')[0]
 
+    # Preprocess box locations
+    boxes_by_x = collections.defaultdict(list)
+    boxes_by_y = collections.defaultdict(list)
+    for box in grid.find('#'):
+        boxes_by_x[box.x].append(box)
+        boxes_by_y[box.y].append(box)
+
     looped = []
-    for i, new_box in enumerate(grid.find('.')):
+    for new_box in grid.find('.'):
         grid[new_box] = '#'
-        if does_it_loop2(grid, start):
+        boxes_by_x[new_box.x].append(new_box)
+        boxes_by_y[new_box.y].append(new_box)
+
+        if does_it_loop2(grid, start, boxes_by_x, boxes_by_y):
             looped.append(new_box)
+
         grid[new_box] = '.'
-        debug(f'Checked box {i} / {len(grid.find('.'))}')
+        boxes_by_x[new_box.x].pop()
+        boxes_by_y[new_box.y].pop()
 
     return len(looped)
 
-def does_it_loop2(grid:Grid, start:Pos) -> bool:
+def does_it_loop2(grid:Grid, start:Pos, boxes_by_x:dict[int, Pos], boxes_by_y:dict[int, Pos]) -> bool:
     visited = set()
     vector = UP
     pos = start
+
     while True:
-        sightline = grid.in_front_of(pos, vector, until='#')
-        if sightline:
-            # Have we reached the edge without hitting a box?
-            if sightline[-1][0] + vector not in grid:
-                return False # (a.k.a. no loop)
-            # Otherwise, move forward
-            pos = sightline[-1][0]
+        # Attempt to find the closest box
+        try:
+            if vector is UP:
+                next_box = max([box for box in boxes_by_x[pos.x] if box.y < pos.y], key=lambda pos: pos.y)
+            elif vector is DOWN:
+                next_box = min([box for box in boxes_by_x[pos.x] if box.y > pos.y], key=lambda pos: pos.y)
+            elif vector is LEFT:
+                next_box = max([box for box in boxes_by_y[pos.y] if box.x < pos.x], key=lambda pos: pos.x)
+            elif vector is RIGHT:
+                next_box = min([box for box in boxes_by_y[pos.y] if box.x > pos.x], key=lambda pos: pos.x)
+            else:
+                raise Exception(f'WTF {vector=}')
+        except ValueError as e:
+            # No next box -> we've reached the edge of the grid
+            debug(f'  -> No loop')
+            debug(e)
+            return False # (a.k.a. no loop)
+
+        # Otherwise, move forward
+        pos = next_box - vector
 
         vector = vector.turn(RIGHT)
         # Loop check!
         if (pos, vector) in visited:
+            debug(f'  -> Loop')
             return True
         visited.add((pos, vector))
-
-
-
-#### Well, this was the old version, which is much more complicated but also ~40x faster
-
-#     height = len(lines)
-#     width = len(lines[0])
-#     boxes = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '#']
-#     start = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '^'][0]
-#     candidate_boxes = [(x, y) for x in range(width) for y in range(height) if lines[y][x] == '.']
-
-#     boxes_by_y = collections.defaultdict(list)
-#     boxes_by_x = collections.defaultdict(list)
-#     for (x, y) in boxes:
-#         boxes_by_y[y].append(x)
-#         boxes_by_x[x].append(y)
-
-#     # Traverse
-#     looped = []
-#     for new_box in candidate_boxes:
-#         debug(f'Trying with a box at {new_box}...')
-#         boxes.append(new_box)
-#         boxes_by_y[new_box[1]].append(new_box[0])
-#         boxes_by_x[new_box[0]].append(new_box[1])
-
-#         if does_it_loop(width, height, boxes, boxes_by_y, boxes_by_x, start):
-#             debug('  -> Box LOOPED :)')
-#             looped.append(new_box)
-#         else:
-#             debug('  -> Box exited')
-
-#         boxes.pop()
-#         boxes_by_y[new_box[1]].pop()
-#         boxes_by_x[new_box[0]].pop()
-
-
-#     debug(f'{looped=}')
-#     return len(looped)
-
-# def does_it_loop(width, height, boxes, boxes_by_y, boxes_by_x, start):
-#     """Returns true if the guard loops, false otherwise."""
-#     (dx, dy) = (0, -1) # up
-#     visited = set()
-#     (x, y) = start
-
-#     while True:
-#         try:
-#             (boxX, boxY) = find_next_box(boxes_by_y, boxes_by_x, (x, y), (dx, dy))
-#         except:
-#             # No next box found --> off the edge of the map
-#             debug(f'  No box found for {(x, y)} at vector {(dx, dy)} - must have exited the map')
-#             return False
-
-#         (x, y) = (boxX - dx, boxY - dy)
-#         (dx, dy) = turn_right((dx, dy))
-#         if ((x, y), (dx, dy)) in visited:
-#             debug(f'  Already seen {(x,y)} at vector {(dx, dy)}, must have looped')
-#             return True # Looped
-#         visited.add(((x, y), (dx, dy)))
-
-
-# def turn_right(vector):
-#     match vector:
-#         case (0, dy): return (-dy, 0)
-#         case (dx, 0): return (0, dx)
-
-# def find_next_box(boxes_by_y, boxes_by_x, pos, vector):
-#     (x, y) = pos
-#     (dx, dy) = vector
-#     # debug(f'  ({boxes_by_y=}, {boxes_by_x=})')
-
-#     match vector:
-#         case (0, dy):
-#             candidate_boxes = boxes_by_x[x]
-#             (start, dir) = (y, dy)
-#         case (dx, 0):
-#             candidate_boxes = boxes_by_y[y]
-#             (start, dir) = (x, dx)
-    
-#     candidate_boxes = list(filter(lambda box: box < start if dir < 0 else box > start, candidate_boxes))
-#     next_box = min(candidate_boxes, key=lambda box: abs(box-start))
-#     debug(f'  Walking from {pos} by {vector}, possible boxes are {list(candidate_boxes)} and I chose {next_box}')
-#     return (x, next_box) if dx == 0 else (next_box, y)
 
 ######################################################################
 

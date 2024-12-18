@@ -91,6 +91,15 @@ class Vector(unpackable.Unpackable):
             'v': DOWN,
         }[arrow]
 
+    @staticmethod
+    def of(dx:int, dy:int) -> Vector:
+        match dx, dy:
+            case -1, 0: return LEFT
+            case 1, 0: return RIGHT
+            case 0, -1: return UP
+            case 0, 1: return DOWN
+            case _, _: return Vector(dx, dy) 
+
     def scale(self, factor:int) -> Vector:
         return Vector(dx=self.dx*factor, dy=self.dy*factor)
 
@@ -115,15 +124,11 @@ class Vector(unpackable.Unpackable):
         return (self.dx, self.dy) < (other.dx, other.dy)
 
     def reverse(self):
-        if self == UP: return DOWN
-        elif self == DOWN: return UP
-        elif self == LEFT: return RIGHT
-        elif self == RIGHT: return LEFT
-        else: return Vector(dx=-1*self.dx, dy=-1*self.dy)
+        return Vector.of(dx=-1*self.dx, dy=-1*self.dy)
 
     def turn(self, dir):
-        if dir == LEFT: return Vector(self.dy, -self.dx)
-        if dir == RIGHT: return Vector(-self.dy, self.dx)
+        if dir == LEFT: return Vector.of(self.dy, -self.dx)
+        if dir == RIGHT: return Vector.of(-self.dy, self.dx)
         else: raise ValueError("Can't turn {dir}")
 
     def __repr__(self):
@@ -159,9 +164,8 @@ class Pos(unpackable.Unpackable):
         return (self.x, self.y) < (other.x, other.y)
 
     def vector_to(self, other:Pos) -> Vector:
-        """TODO: This assumes they're colinear but might be wrong otherwise. Probably good enough for AOC."""
-        distance = self.taxicab(other)
-        return Vector((other.x - self.x) // distance, (other.y - self.y) // distance)
+        def _sign(x): return (x > 0) - (x < 0)
+        return Vector(_sign(other.x - self.x), _sign(other.y - self.y))
 
     def taxicab(self, other:Pos) -> int:
         return abs(self.x - other.x) + abs(self.y - other.y)
@@ -179,8 +183,12 @@ class Pos(unpackable.Unpackable):
             raise ValueError(f'Points {self} and {other} are not in line with each other')
 
         distance = self.taxicab(other)
-        direction = (other-self) // distance
-        return [self + direction*i for i in range(0, distance+1)]
+        direction = self.vector_to(other)
+        pt = self
+        points = []
+        for _ in range(distance+1):
+            points.append(pt)
+            pt += direction
 
 UP = Vector(dx=0, dy=-1)
 DOWN = Vector(dx=0, dy=1)
