@@ -98,7 +98,7 @@ def day15_part1(lines:list[str]):
 
     # Simulate
     robot = room.find('@')[0]
-    for move in enumerate(moves):
+    for move in moves:
         whats_up = room.in_front_of(robot, move, until='#')
         # Is there any space to move boxes? (if not, happily no-op into a wall)
         empties = [pos for (pos, val) in whats_up if val == '.']
@@ -268,7 +268,7 @@ def split_crops(grid):
 def perimeter(region):
     debug(f'Finding perimeter of {region=}')
     # The perimeter is equal to the number of neighbors outside the region (non-unique, since we can border it on more than one side).
-    return len(neighbor for (x, y) in region for neighbor in neighbors(x, y) if neighbor not in region)
+    return len([neighbor for (x, y) in region for neighbor in neighbors(x, y) if neighbor not in region])
 
 def num_sides(region):
     debug(f'Finding number of sides of {region=}')
