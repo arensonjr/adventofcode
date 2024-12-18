@@ -19,7 +19,7 @@ if ([string]::IsNullOrWhiteSpace($args[3])) {
 
 ########## Python
 # uv run -m cProfile aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
-# uv run aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
+uv run aoc.py "day${day}" "part${part}" "day${day}_${inp}.txt" $debug
 
 ########## Kotlin
 # write-host "Compiling..."
@@ -35,4 +35,4 @@ if ([string]::IsNullOrWhiteSpace($args[3])) {
 # }
 
 ########## Go
-go run aoc.go --func="day${day}_part${part}" --input="day${day}_${inp}.txt" --debug=$debug
+# go run aoc.go --func="day${day}_part${part}" --input="day${day}_${inp}.txt" --debug=$debug
