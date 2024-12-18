@@ -12,3 +12,6 @@ $env:Path = "E:\InstalledPrograms\kotlinc\bin;$env:Path"
 
 # To install Rust:
 # download from https://www.rust-lang.org/tools/install
+
+# To install Go:
+# download from https://go.dev/learn/

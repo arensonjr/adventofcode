@@ -28,8 +28,11 @@ if ([string]::IsNullOrWhiteSpace($args[3])) {
 # kotlin AocKt day${day} part${part} "day${day}_${inp}.txt" $debug
 
 ########## Rust
-if ([string]::IsNullOrWhiteSpace($args[3])) {
-    cargo run --release -- "day${day}_part${part}" "day${day}_${inp}.txt"
-} else {
-    cargo run -- "day${day}_part${part}" "day${day}_${inp}.txt"
-}
+# if ([string]::IsNullOrWhiteSpace($args[3])) {
+#     cargo run --release -- "day${day}_part${part}" "day${day}_${inp}.txt"
+# } else {
+#     cargo run -- "day${day}_part${part}" "day${day}_${inp}.txt"
+# }
+
+########## Go
+go run aoc.go --func="day${day}_part${part}" --input="day${day}_${inp}.txt" --debug=$debug
