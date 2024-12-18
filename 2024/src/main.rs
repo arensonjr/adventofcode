@@ -1,6 +1,3 @@
-#![feature(unchecked_shifts)]
-
-use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
 use std::fs::read_to_string;
