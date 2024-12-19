@@ -35,5 +35,17 @@ class AocTestInputs(unittest.TestCase):
     def test_day16_pt2(self):
         self.assertEqual(run_func(aoc.day16_part2, "day16_test.txt"), 45)
 
+    def test_day19_pt1(self):
+        self.assertEqual(run_func(aoc.day19_part1, "day19_test.txt"), 6)
+
+    def test_day19_pt1_input(self):
+        self.assertEqual(run_func(aoc.day19_part1, "day19_input.txt"), 265)
+
+    def test_day19_pt2(self):
+        self.assertEqual(run_func(aoc.day19_part2, "day19_test.txt"), 16)
+
+    def test_day19_pt2_input(self):
+        self.assertEqual(run_func(aoc.day19_part2, "day19_input.txt"), 752461716635602)
+
 if __name__ == "__main__":
     unittest.main()

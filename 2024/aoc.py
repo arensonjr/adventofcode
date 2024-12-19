@@ -13,6 +13,67 @@ from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
 
 ######################################################################
 
+def day19_part1(lines):
+    # Parse
+    towels = set(map(str.strip, lines[0].split(',')))
+    debug(f'{towels=}')
+    problems = lines[2:]
+
+    solvable = 0
+    for problem in problems:
+        debug(f'{problem}:')
+        possible_indices = {0}
+        for target in range(len(problem)):
+            found = False
+            for prev in possible_indices:
+                if problem[prev:target + 1] in towels:
+                    possible_indices.add(target+1)
+                    debug(f'  |- Can use towel {problem[prev:target+1]} from {prev} to {target+1}, new {possible_indices=}')
+                    found = True
+                    break
+                else:
+                    debug(f'  |- {problem[prev:target + 1]} is not a towel from {prev} to {target+1}')
+            # if not found:
+            #     debug(f"  \\-> Can't make {target}th char of '{problem}' ({possible_indices=})")
+            #     break
+        if len(problem) - 1 in possible_indices:
+            debug(f"  \\-> CAN make {problem}")
+            solvable += 1
+
+    return solvable
+
+def day19_part2(lines):
+    # Parse
+    towels = set(map(str.strip, lines[0].split(',')))
+    debug(f'{towels=}')
+    problems = lines[2:]
+
+    solvable = 0
+    for problem in problems:
+        debug(f'{problem}:')
+        possible_indices = collections.defaultdict(int)
+        possible_indices[0] += 1
+        for target in range(len(problem)):
+            found = False
+            for prev in set(possible_indices.keys()):
+                if problem[prev:target + 1] in towels:
+                    possible_indices[target+1] += possible_indices[prev]
+                    debug(f'  |- Can use towel {problem[prev:target+1]} from {prev} to {target+1}, new {possible_indices=}')
+                    # found = True
+                    # break
+                else:
+                    debug(f'  |- {problem[prev:target + 1]} is not a towel from {prev} to {target+1}')
+            # if not found:
+            #     debug(f"  \\-> Can't make {target}th char of '{problem}' ({possible_indices=})")
+            #     break
+        if (num_solutions := possible_indices[len(problem)]) > 0:
+            debug(f"  \\-> CAN make {problem} ({num_solutions})")
+            solvable += num_solutions
+
+    return solvable
+
+######################################################################
+
 class Day16Grid(Grid):
     def is_neighbor(self, x, y):
         return super().is_neighbor(x, y) and self[x] != '#' and self[y] != '#'
