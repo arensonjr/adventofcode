@@ -27,10 +27,7 @@ class AocGridPerformanceTests(unittest.TestCase):
         )
 
     def test_day6_pt2(self):
-        # ~4m20s with class-based grid
-        # ~2m5s with type aliases
-        #
-        # I feel like it's easier to do better here.
+        # ~6s after some problem-specific optimizations
         self.assertLessEqual(
             timed(lambda: run_func("day6_part2", "day6_input.txt")),
             10
