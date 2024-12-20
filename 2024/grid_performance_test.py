@@ -36,5 +36,12 @@ class AocGridPerformanceTests(unittest.TestCase):
             10
         )
 
+    def test_day20_pt2(self):
+        # ~8s with class-based grid
+        self.assertLessEqual(
+            timed(lambda: run_func("day20_part2", "day20_input.txt")),
+            10
+        )
+
 if __name__ == "__main__":
     unittest.main()

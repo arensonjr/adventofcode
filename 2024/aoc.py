@@ -28,31 +28,23 @@ def day20_dijkstra(grid:Day20Grid, start:Pos, end:Pos, ignore_walls_at_costs={})
     visited = set()
     while queue:
         cost, pos, path = queue.popleft()
-        # debug(f'POLLED {(cost, pos, path)=}')
         if pos in visited:
-            # debug(f'  | -> Already visited {pos} ({num_paths[pos]})')
             continue
         visited.add(pos)
 
         if pos == end:
             return cost, path
 
-
         # If not at the end, add all neighbors to the queue
         neighbors = grid.neighbors(pos)
         if cost in ignore_walls_at_costs:
-            # debug(f'Step {cost}, {pos=} {ignore_walls_at_costs=} {neighbors=}')
             grid.ignore_walls.add(ignore_walls_at_costs[cost])
             neighbors = grid.neighbors(pos)
             grid.ignore_walls.remove(ignore_walls_at_costs[cost])
-            # neighbors.append(('.', ignore_walls_at_costs[cost]))
-            # debug(f'  --> New {neighbors=}')
         for (_, nbr) in neighbors:
-            # debug(f'  |- enqueueing {nbr} with new cost {cost + 1}')
             queue.append((cost + 1, nbr, path + [nbr]))
 
-
-def day20_part1(lines):
+def day20(lines, max_jump=2, min_savings=1):
     # Parse
     grid = Day20Grid(lines)
     start = grid.find('S')[0]
@@ -63,109 +55,16 @@ def day20_part1(lines):
     num_steps, path = day20_dijkstra(grid, start, end) 
     debug(f'Running fairly takes {num_steps} steps')
 
-    # debug(' -------------- TAKE TWO ------------------- ') # Misses multiple ways to cheat from same pos
-    # num_cheats = 0
-    # cheat_counts = collections.defaultdict(int)
-    # for i in range(num_steps):
-    #     cheat_steps, cheat_path = day20_dijkstra(grid, start, end, ignore_walls_at_costs=(i, i+1))
-    #     if i == 18:
-    #         print(f'{i=} {cheat_steps=} {cheat_path=}')
-    #     if cheat_steps < num_steps:
-    #         debug(f'Cheating at {(i, i+1)} gives one more way to cheat (saves {num_steps - cheat_steps} ps)\nvia {cheat_path}\n')
-    #         num_cheats += 1
-    #         cheat_counts[num_steps - cheat_steps] += 1
-    
-    # # Missing: 20, 40, 2x4??
-    # debug(f'{sorted(cheat_counts.items())=}')
-    # return num_cheats
-
-    # debug(' -------------- TAKE TWO ------------------- ') # Works on test, but is too slow
-    # delta_counts = collections.defaultdict(int)
-    # for i in range(num_steps):
-    #     pos = path[i]
-    #     walls = [p for p in pos.adjacents() if p in grid and grid[p] == '#']
-    #     for wall in walls:
-    #         # grid[wall] = '.'
-    #         cheat_cost, cheat_path = day20_dijkstra(grid, start, end, {i: wall, i+1: wall})
-    #         # grid[wall] = '#'
-    #         if cheat_cost < num_steps:
-    #             debug(f'Cheating at step {i} with wall {wall} gives cost {cheat_cost}\n({cheat_path=}\n)')
-    #             delta_counts[num_steps - cheat_cost] += 1
-    # debug(f'Eliminating walls one at a time gives {sorted(delta_counts.items())=}')
-    # return sum(v for (k, v) in delta_counts.items() if k > 100)
-
-    # debug(' -------------- TAKE THREE ------------------- ')
-    # path_nodes = set(path)
-    # delta_counts = collections.defaultdict(int)
-    # for i in range(num_steps):
-    #     pos = path[i]
-    #     walls = [p for p in pos.adjacents() if p in grid and grid[p] == '#']
-    #     for wall in walls:
-    #         for wall_adjacent in set(wall.adjacents()).intersection(path_nodes):
-    #             j = path.index(wall_adjacent)
-    #             cheat_savings = j - i - 2
-    #             if cheat_savings > 0:
-    #                 delta_counts[cheat_savings] += 1
-    #                 debug(f'Cheating at step {i} with wall {wall} (jumping to {wall_adjacent}) gives savings {cheat_savings})')
-    # debug(f'Eliminating walls one at a time gives {sorted(delta_counts.items())=}')
-    # return sum(v for (k, v) in delta_counts.items())
-
-    debug(' -------------- TAKE FOUR ------------------- ')
-    path_nodes = set(path)
-    delta_counts = collections.defaultdict(int)
-    for i in range(num_steps):
-        pos = path[i]
-        skip_to = [(j+i, p) for (j, p) in enumerate(path[i:]) if pos.taxicab(p) <= 2]
-        for (j, dest) in skip_to:
-            cheat_savings = j - i - pos.taxicab(dest)
-            if cheat_savings > 0:
-                delta_counts[cheat_savings] += 1
-                debug(f'Cheating at step {i} can give savings {cheat_savings})')
-    debug(f'Eliminating walls one at a time gives {sorted(delta_counts.items())=}')
-    return sum(
-        v for (k, v) in delta_counts.items()
-        if k >= 100
-    )
-
-def day20_part2(lines):
-    # Parse
-    grid = Day20Grid(lines)
-    start = grid.find('S')[0]
-    end = grid.find('E')[0]
-    
-    # debug(f'Starting grid:\n{grid.pretty()}\n')
-
-    num_steps, path = day20_dijkstra(grid, start, end) 
-    # debug(f'Running fairly takes {num_steps} steps')
-
-    # # Reusing the solution from pt1:
-    # delta_counts = collections.defaultdict(int)
-    # for i in range(num_steps):
-    #     pos = path[i]
-    #     cheat_savings = (
-    #         savings
-    #         for (j, p) in enumerate(path[i:])
-    #         if (dist := pos.taxicab(p)) <= 20 and (savings := j - dist) >= 100
-    #     )
-    #     for savings in cheat_savings:
-    #         delta_counts[savings] += 1
-    # # debug(f'Eliminating walls one at a time gives {sorted(delta_counts.items())=}')
-    # return sum(delta_counts.values())
-    # # return sum(
-    # #     v for (k, v) in delta_counts.items()
-    # #     # if k >= 50
-    # #     if k >= 100
-    # # )
-
-    # # Take two! Seeing if conciseness lets python optimize at all.
+    # Sadly, making this more concise only helped optimize ~5-10%
     return len([
         savings
         for (i, jump_from) in enumerate(path)
         for (j, jump_to) in enumerate(path[i:])
-        if (dist := jump_from.taxicab(jump_to)) <= 20 and (savings := j - dist) >= 100
+        if (dist := jump_from.taxicab(jump_to)) <= max_jump and (savings := j - dist) >= min_savings
     ])
 
-
+def day20_part1(lines): return day20(lines, max_jump=2, min_savings=100)
+def day20_part2(lines): return day20(lines, max_jump=20, min_savings=100)
 
 ######################################################################
 
