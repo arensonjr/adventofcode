@@ -50,7 +50,8 @@ class Grid(abc.ABC):
         return pos1 in self and pos2 in self and pos1.taxicab(pos2) == 1
 
     def neighbors(self, pos):
-        return self.grid.edges(pos)
+        # return self.grid.edges(pos)
+        return [(self[p], p) for p in pos.adjacents() if self.is_neighbor(pos, p)]
 
     def __contains__(self, pos:Pos) -> bool:
         return 0 <= pos.x < self.width and 0 <= pos.y < self.height
@@ -165,7 +166,7 @@ class Pos(unpackable.Unpackable):
 
     def vector_to(self, other:Pos) -> Vector:
         def _sign(x): return (x > 0) - (x < 0)
-        return Vector(_sign(other.x - self.x), _sign(other.y - self.y))
+        return Vector.of(_sign(other.x - self.x), _sign(other.y - self.y))
 
     def taxicab(self, other:Pos) -> int:
         return abs(self.x - other.x) + abs(self.y - other.y)
