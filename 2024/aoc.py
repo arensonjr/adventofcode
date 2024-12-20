@@ -13,40 +13,27 @@ from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
 
 ######################################################################
 
-class Day20Grid(Grid):
-    ignore_walls = set()
-    def is_neighbor(self, x, y):
-        return (
-            super().is_neighbor(x, y)
-            and (self[x] != '#' or x in self.ignore_walls)
-            and (self[y] != '#' or y in self.ignore_walls)
-        )
-
-def day20_dijkstra(grid:Day20Grid, start:Pos, end:Pos, ignore_walls_at_costs={}):
+def day20_dijkstra(grid:Grid, start:Pos, end:Pos) -> tuple[dict[Pos, int], list[Pos]]:
     queue = collections.deque()
     queue.append((0, start, [start]))
-    visited = set()
+    costs = {}
     while queue:
         cost, pos, path = queue.popleft()
-        if pos in visited:
+        if pos in costs:
             continue
-        visited.add(pos)
+        costs[pos] = cost
 
         if pos == end:
             return cost, path
 
         # If not at the end, add all neighbors to the queue
         neighbors = grid.neighbors(pos)
-        if cost in ignore_walls_at_costs:
-            grid.ignore_walls.add(ignore_walls_at_costs[cost])
-            neighbors = grid.neighbors(pos)
-            grid.ignore_walls.remove(ignore_walls_at_costs[cost])
         for (_, nbr) in neighbors:
             queue.append((cost + 1, nbr, path + [nbr]))
 
 def day20(lines, max_jump=2, min_savings=1):
     # Parse
-    grid = Day20Grid(lines)
+    grid = GridWithWalls(lines)
     start = grid.find('S')[0]
     end = grid.find('E')[0]
     
@@ -65,6 +52,10 @@ def day20(lines, max_jump=2, min_savings=1):
 
 def day20_part1(lines): return day20(lines, max_jump=2, min_savings=100)
 def day20_part2(lines): return day20(lines, max_jump=20, min_savings=100)
+
+# Test version
+# def day20_part1(lines): return day20(lines, max_jump=2, min_savings=1)
+# def day20_part2(lines): return day20(lines, max_jump=20, min_savings=50)
 
 ######################################################################
 

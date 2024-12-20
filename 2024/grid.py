@@ -152,6 +152,7 @@ class Pos(unpackable.Unpackable):
 
     def __add__(self, other) -> Pos:
         match other:
+            case (x, y): return Pos(self.x + x, self.y + y)
             case Pos(x, y): return Pos(self.x + x, self.y + y)
             case Vector(dx, dy): return Pos(self.x + dx, self.y + dy)
 
