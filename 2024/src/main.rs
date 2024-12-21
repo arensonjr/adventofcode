@@ -1,6 +1,9 @@
 use std::env;
 use std::fmt::Debug;
 use std::fs::read_to_string;
+use std::collections::HashMap;
+
+/* ---------------------------------------------------- */
 
 fn combo(operand: i64, a: i64, b: i64, c: i64) -> i64 {
     return match operand {
@@ -195,3 +198,89 @@ fn debug<T: Debug>(obj: T) -> () {
 }
 #[cfg(not(debug_assertions))]
 fn debug<T: Debug>(_: T) -> () {}
+
+/* ---------------------------------------------------- */
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+struct Position {
+    x: usize,
+    y: usize,
+}
+
+impl std::ops::Add<Position> for Position {
+    type Output = Position;
+    fn add(self, other: Self) -> Self {
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+impl std::ops::Add<Vector> for Position {
+    type Output = Position;
+    fn add(self, other: Vector) -> Self {
+        Self {
+            x: self.x + other.dx,
+            y: self.y + other.dy,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+struct Vector {
+    dx: usize,
+    dy: usize,
+}
+
+impl std::ops::Add<Position> for Vector {
+    type Output = Position;
+    fn add(self, other: Position) -> Position {
+        Position {
+            x: self.dx + other.x,
+            y: self.dy + other.y,
+        }
+    }
+}
+
+impl std::ops::Add<Vector> for Vector {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self {
+            dx: self.dx + other.dx,
+            dy: self.dy + other.dy,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Grid {
+    height: usize,
+    width: usize,
+    grid: Vec<Vec<String>>,
+}
+
+trait Graph {
+    fn is_neighbor(&self, pos1: &Position, pos2: &Position) -> bool;
+    fn neighbors(pos: &Position) -> Vec<Position>;
+}
+
+impl Graph for Grid {
+    fn is_neighbor(&self, Position{x:x1, y:y1}: &Position, Position{x:x2, y:y2}: &Position) -> bool {
+        return (0..self.height).contains(y1)
+            && (0..self.height).contains(y2)
+            && (0..self.width).contains(x1)
+            && (0..self.width).contains(x2)
+            && self.grid[*y1][*x1] != "#"
+            && self.grid[*y2][*x2] != "#";
+    }
+
+    fn neighbors(Position{x, y}: &Position) -> Vec<Position> {
+        vec![
+            Position { x: *x + 1, y: *y},
+            Position { x: *x - 1, y: *y},
+            Position { x: *x, y: *y + 1},
+            Position { x: *x, y: *y - 1},
+        ]
+    }
+}

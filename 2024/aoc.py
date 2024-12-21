@@ -8,8 +8,130 @@ import os
 import re
 import sys
 import time
+import typing
 
 from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
+
+######################################################################
+
+def day21_bfs(grid:Grid, start:Pos, end:Pos) -> set[str]:
+    paths = collections.defaultdict(set)
+    costs = collections.defaultdict(lambda: math.inf)
+    queue = collections.deque([(start, 0, ())])
+    while queue:
+        next, cost, path = queue.popleft()
+        if cost > costs[end]:
+            break
+        next_path = path + (next,)
+
+        # I have a feeling pt2 will require me to count number of ways of making stuff,
+        # so do a complicated `visited` check and maintain paths
+        if not paths[next] == 0 or costs[next] == cost:
+            costs[next] = cost
+            paths[next] = paths[next] | {next_path}
+        else:
+            continue
+
+        for _, nbr in grid.neighbors(next):
+            queue.append((nbr, cost + 1, next_path))
+
+    return {
+        ''.join((p2-p1).to_arrow() for (p1, p2) in zip(path, path[1:])) + 'A'
+        for path in paths[end]
+    }
+
+def cache_paths(grid:Grid) -> dict[tuple[str, str], set[str]]:
+    cache = {}
+    for start in grid.grid.nodes:
+        for end in grid.grid.nodes:
+            if grid[start] == '#' or grid[end] == '#':
+                continue
+            if grid[start] == grid[end]:
+                cache[(grid[start], grid[end])] = {'A'}
+            else:
+                cache[(grid[start], grid[end])] = day21_bfs(grid, start, end)
+    return cache
+
+def instructions_for(sequences:set[str], cache:dict[tuple[str,str], set[str]]) -> str:
+    all_options = set()
+    min_len = math.inf
+    for sequence in sequences:
+        steps = [('A', sequence[0])] + list(zip(sequence, sequence[1:]))
+        options = {''}
+        for (from_button, to_button) in steps:
+            options = {
+                path + step
+                for path in options
+                for step in cache[(from_button, to_button)]
+            }
+        new_min = min(map(len, options))
+        if new_min < min_len:
+            debug(f'  |  |- ALERT: Found a new minimum len')
+        min_len = min(min_len, new_min)
+        all_options = {o for o in all_options | options if len(o) == min_len}
+
+    # TODO: Return a "best" option by virtue of arrow cost?
+    # return all_options
+    # TODO: Instead of filtering here, we need to filter as we're choosing options in the sequence. Don't keep multiple options, only the best one.
+    s = arbitrary(all_options)
+    if (s[0], s[1]) in cache:
+        return {min(all_options, key=lambda seq: arrow_cost(seq, cache))}
+    else:
+        return all_options
+
+def arrow_cost(sequence:str, arrow_cache:dict[tuple[str, str], set[str]]) -> int:
+    """Heuristic for the cost of executing a particular sequence of arrows."""
+    cost = 0
+    for walk_from, walk_to in zip(sequence, sequence[1:]):
+        cost += len(arbitrary(arrow_cache[(walk_from, walk_to)]))
+    return cost
+
+def day21_part1(lines):
+    number_pad = GridWithWalls(['789', '456', '123', '#0A'])
+    number_pad_cache = cache_paths(number_pad)
+
+    arrow_pad = GridWithWalls(['#^A', '<v>'])
+    arrow_pad_cache = cache_paths(arrow_pad)
+
+    total_complexity = 0
+    for problem in lines:
+        # path, path_count = walk_grid(problem, number_pad)
+        debug(f'Walking {problem}:')
+        number_pad_instructions = instructions_for({problem}, number_pad_cache)
+        debug(f'  |- Step 1: ({len(number_pad_instructions)}) {arbitrary(number_pad_instructions)}')
+        arrow_pad_instructions = instructions_for(number_pad_instructions, arrow_pad_cache)
+        debug(f'  |- Step 2: ({len(arrow_pad_instructions)}) {arbitrary(arrow_pad_instructions)}')
+        my_instructions = instructions_for(arrow_pad_instructions, arrow_pad_cache)
+        debug(f'  |- Step 3: ({len(my_instructions)}) {arbitrary(my_instructions)} ({len(arbitrary(my_instructions))})')
+
+        num_steps_required = len(arbitrary(my_instructions))
+        complexity = num_steps_required * int(problem[:-1])
+        total_complexity += complexity
+
+    return total_complexity
+
+def day21_part2(lines):
+    number_pad = GridWithWalls(['789', '456', '123', '#0A'])
+    number_pad_cache = cache_paths(number_pad)
+
+    arrow_pad = GridWithWalls(['#^A', '<v>'])
+    arrow_pad_cache = cache_paths(arrow_pad)
+
+    total_complexity = 0
+    for problem in lines:
+        # path, path_count = walk_grid(problem, number_pad)
+        debug(f'Walking {problem}:')
+        instructions = instructions_for({problem}, number_pad_cache)
+        debug(f'  |- Step 1: ({len(instructions)}) {arbitrary(instructions)}')
+        for i in range(25):
+            instructions = instructions_for(instructions, arrow_pad_cache)
+            debug(f'  |- Step {1+i}: ({len(instructions)}) {arbitrary(instructions)}')
+
+        num_steps_required = len(arbitrary(instructions))
+        complexity = num_steps_required * int(problem[:-1])
+        total_complexity += complexity
+
+    return total_complexity
 
 ######################################################################
 
@@ -133,7 +255,7 @@ def day16_dijkstra(grid, start, end):
             new_dir = nbr - pos
             debug(f'  |- enqueueing {nbr} with new cost {new_cost[new_dir] + 1}')
             next_cost = new_cost[new_dir] + 1
-            new_paths = all_paths[(pos, dir)].union({nbr})
+            new_paths = all_paths[(pos, dir)] | {nbr}
             heapq.heappush(queue, (next_cost, (nbr, new_dir, new_paths)))
 
         # if DEBUG:
@@ -234,7 +356,7 @@ def day15_part2(lines:list[str]):
                     left for pos in next_row
                     if room[pos] == ']' and (left := pos + LEFT) not in next_row
                 }
-                next_row = next_row.union(unmatched_left).union(unmatched_right)
+                next_row = next_row | unmatched_left | unmatched_right
 
                 # Stop if any of the boxes we have to move would hit any wall
                 if any(room[pos] == '#' for pos in next_row):
@@ -476,6 +598,9 @@ def does_it_loop2(grid:Grid, start:Pos, boxes_by_x:dict[int, Pos], boxes_by_y:di
         visited.add((pos, vector))
 
 ######################################################################
+
+def arbitrary(s: set[typing.Any]):
+    for elem in s: return elem
 
 def every_n_lines(lines, n, gap=False):
     per_group = n

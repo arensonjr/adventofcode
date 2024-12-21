@@ -101,6 +101,14 @@ class Vector(unpackable.Unpackable):
             case 0, 1: return DOWN
             case _, _: return Vector(dx, dy) 
 
+    def to_arrow(self) -> str:
+        return {
+            UP: '^',
+            DOWN: 'v',
+            LEFT: '<',
+            RIGHT: '>'
+        }[self]
+
     def scale(self, factor:int) -> Vector:
         return Vector(dx=self.dx*factor, dy=self.dy*factor)
 
@@ -158,6 +166,7 @@ class Pos(unpackable.Unpackable):
 
     def __sub__(self, other):
         match other:
+            case (x, y): return Pos(self.x - x, self.y - y)
             case Pos(x, y): return Vector(self.x - x, self.y - y)
             case Vector(dx, dy): return Pos(self.x - dx, self.y - dy)
             case otherwise: raise ValueError(f"Can't subtract {self} and {other}")
