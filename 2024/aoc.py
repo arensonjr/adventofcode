@@ -52,86 +52,35 @@ def cache_paths(grid:Grid) -> dict[tuple[str, str], set[str]]:
                 cache[(grid[start], grid[end])] = day21_bfs(grid, start, end)
     return cache
 
-def instructions_for(sequences:set[str], cache:dict[tuple[str,str], set[str]]) -> str:
-    all_options = set()
-    min_len = math.inf
-    for sequence in sequences:
-        steps = [('A', sequence[0])] + list(zip(sequence, sequence[1:]))
-        options = {''}
-        for (from_button, to_button) in steps:
-            options = {
-                path + step
-                for path in options
-                for step in cache[(from_button, to_button)]
-            }
-        new_min = min(map(len, options))
-        if new_min < min_len:
-            debug(f'  |  |- ALERT: Found a new minimum len')
-        min_len = min(min_len, new_min)
-        all_options = {o for o in all_options | options if len(o) == min_len}
-
-    # TODO: Return a "best" option by virtue of arrow cost?
-    # return all_options
-    # TODO: Instead of filtering here, we need to filter as we're choosing options in the sequence. Don't keep multiple options, only the best one.
-    s = arbitrary(all_options)
-    if (s[0], s[1]) in cache:
-        return {min(all_options, key=lambda seq: arrow_cost(seq, cache))}
-    else:
-        return all_options
-
-def arrow_cost(sequence:str, arrow_cache:dict[tuple[str, str], set[str]]) -> int:
-    """Heuristic for the cost of executing a particular sequence of arrows."""
-    cost = 0
-    for walk_from, walk_to in zip(sequence, sequence[1:]):
-        cost += len(arbitrary(arrow_cache[(walk_from, walk_to)]))
-    return cost
-
-def day21_part1(lines):
-    number_pad = GridWithWalls(['789', '456', '123', '#0A'])
-    number_pad_cache = cache_paths(number_pad)
-
+def day21(lines:list[str], steps:int):
     arrow_pad = GridWithWalls(['#^A', '<v>'])
-    arrow_pad_cache = cache_paths(arrow_pad)
-
-    total_complexity = 0
-    for problem in lines:
-        # path, path_count = walk_grid(problem, number_pad)
-        debug(f'Walking {problem}:')
-        number_pad_instructions = instructions_for({problem}, number_pad_cache)
-        debug(f'  |- Step 1: ({len(number_pad_instructions)}) {arbitrary(number_pad_instructions)}')
-        arrow_pad_instructions = instructions_for(number_pad_instructions, arrow_pad_cache)
-        debug(f'  |- Step 2: ({len(arrow_pad_instructions)}) {arbitrary(arrow_pad_instructions)}')
-        my_instructions = instructions_for(arrow_pad_instructions, arrow_pad_cache)
-        debug(f'  |- Step 3: ({len(my_instructions)}) {arbitrary(my_instructions)} ({len(arbitrary(my_instructions))})')
-
-        num_steps_required = len(arbitrary(my_instructions))
-        complexity = num_steps_required * int(problem[:-1])
-        total_complexity += complexity
-
-    return total_complexity
-
-def day21_part2(lines):
     number_pad = GridWithWalls(['789', '456', '123', '#0A'])
-    number_pad_cache = cache_paths(number_pad)
+    cache = cache_paths(arrow_pad) | cache_paths(number_pad) 
 
-    arrow_pad = GridWithWalls(['#^A', '<v>'])
-    arrow_pad_cache = cache_paths(arrow_pad)
+    # Defining an inner function so that `cache` isn't a cache key to the recursive fn
+    @functools.lru_cache
+    def _num_solutions(sequence:str, steps:int):
+        if steps == 0:
+            return len(sequence)
 
-    total_complexity = 0
-    for problem in lines:
-        # path, path_count = walk_grid(problem, number_pad)
-        debug(f'Walking {problem}:')
-        instructions = instructions_for({problem}, number_pad_cache)
-        debug(f'  |- Step 1: ({len(instructions)}) {arbitrary(instructions)}')
-        for i in range(25):
-            instructions = instructions_for(instructions, arrow_pad_cache)
-            debug(f'  |- Step {1+i}: ({len(instructions)}) {arbitrary(instructions)}')
+        sequence = 'A' + sequence
+        cost = 0
+        for i in range(len(sequence) - 1):
+            options = cache[(sequence[i], sequence[i+1])]
+            cost += min(_num_solutions(opt, steps-1) for opt in options)
+        debug(f'num_solutions({sequence=}, {steps=}) = {cost}')
+        return cost
 
-        num_steps_required = len(arbitrary(instructions))
-        complexity = num_steps_required * int(problem[:-1])
-        total_complexity += complexity
+    # return sum(_num_solutions(line, steps) for line in lines)
+    total = 0
+    for line in lines:
+        cost = _num_solutions(line, steps)
+        debug(f'===== cost({line=}): {cost} =====')
+        total += cost
+    return sum(_num_solutions(line, steps) * int(line[:-1]) for line in lines)
 
-    return total_complexity
+def day21_part1(lines): return day21(lines, steps=3)
+def day21_part2(lines): return day21(lines, steps=26)
 
 ######################################################################
 
