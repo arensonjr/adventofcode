@@ -1,7 +1,76 @@
+use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
 use std::fs::read_to_string;
-use std::collections::HashMap;
+use std::time::Instant;
+
+/* ---------------------------------------------------- */
+
+fn day22_part1(lines: &Vec<String>) -> String {
+    let secret_numbers: Vec<i64> = lines
+        .iter()
+        .map(String::as_str)
+        .map(str::parse::<i64>)
+        .map(Result::unwrap)
+        .collect();
+
+    let mut total = 0;
+    for mut secret_num in secret_numbers {
+        debug(format!("Secret number: {}", secret_num));
+        for _step in 0..2000 {
+            secret_num = ((secret_num * 64) ^ secret_num) % 16777216; 
+            secret_num = ((secret_num / 32) ^ secret_num) % 16777216; 
+            secret_num = ((secret_num * 2048) ^ secret_num) % 16777216; 
+            // debug(format!("  |- After {} steps: {}", step + 1, secret_num));
+        }
+        debug(format!("  |- After 2000 steps: {}", secret_num));
+        total += secret_num;
+    }
+
+    return total.to_string();
+}
+
+fn day22_part2(lines: &Vec<String>) -> String {
+    let secret_numbers: Vec<i64> = lines
+        .iter()
+        .map(String::as_str)
+        .map(str::parse::<i64>)
+        .map(Result::unwrap)
+        .collect();
+
+    let mut overall_delta_results: HashMap<Vec<i64>, i64> = HashMap::new();
+    for mut secret_num in secret_numbers {
+        let mut deltas = Vec::with_capacity(4);
+        let mut delta_results: HashMap<Vec<i64>, i64> = HashMap::new();
+        debug(format!("Secret number: {}", secret_num));
+        for _step in 0..2000 {
+            let mut next = secret_num;
+            next = ((next * 64) ^ next) % 16777216; 
+            next = ((next / 32) ^ next) % 16777216; 
+            next = ((next * 2048) ^ next) % 16777216; 
+            let delta = (next % 10) - (secret_num % 10);
+            secret_num = next;
+            // debug(format!("  |- After {} steps: {} -> {} ({})", step + 1, next, next % 10, delta));
+
+            deltas.push(delta);
+            if deltas.len() > 4 {
+                deltas.remove(0);
+            }
+            if let Some(end) = deltas.rchunks(4.min(deltas.len())).next() {
+                let last_four = end.to_vec();
+                if !delta_results.contains_key(&last_four) {
+                    delta_results.insert(last_four.clone(), secret_num % 10);
+                }
+            } 
+        }
+        for (k, v) in delta_results.iter() {
+            let prior = overall_delta_results.get(k).unwrap_or(&0);
+            overall_delta_results.insert(k.to_vec(), prior + v);
+        }
+    }
+
+    return overall_delta_results.values().max().unwrap().to_string();
+}
 
 /* ---------------------------------------------------- */
 
@@ -12,19 +81,19 @@ fn combo(operand: i64, a: i64, b: i64, c: i64) -> i64 {
         5 => b,
         6 => c,
         _ => unimplemented!("Unknown operand"),
-    }
+    };
 }
 
-fn run_program(init_a :&i64, init_b: &i64, init_c: &i64, program: &Vec<i64>) -> Vec<i64> {
+fn run_program(init_a: &i64, init_b: &i64, init_c: &i64, program: &Vec<i64>) -> Vec<i64> {
     let mut a: i64 = *init_a;
     let mut b: i64 = *init_b;
     let mut c: i64 = *init_c;
 
     let mut i = 0;
-    let mut output : Vec<i64> = vec![];
+    let mut output: Vec<i64> = vec![];
     while i < program.len() {
         let opcode = program[i];
-        let operand = program[i+1];
+        let operand = program[i + 1];
         i += 2;
 
         if opcode == 0 {
@@ -56,7 +125,17 @@ fn run_program(init_a :&i64, init_b: &i64, init_c: &i64, program: &Vec<i64>) -> 
             let combo = combo(operand, a, b, c);
             output.push(combo % 8);
             // debug(format!("OUT({}) -> combo={} combo%8={}", operand, combo, combo % 8));
-            debug(format!("OUT({}) -> combo={} combo%8={} output={}", operand, combo, combo % 8, output.iter().map(|x| { x.to_string() }).collect::<Vec<String>>().join(",")));
+            debug(format!(
+                "OUT({}) -> combo={} combo%8={} output={}",
+                operand,
+                combo,
+                combo % 8,
+                output
+                    .iter()
+                    .map(|x| { x.to_string() })
+                    .collect::<Vec<String>>()
+                    .join(",")
+            ));
         } else if opcode == 6 {
             // BDV - A divided by 2^combo into B
             let exp = combo(operand, a, b, c);
@@ -93,9 +172,13 @@ fn day17_part1(lines: &Vec<String>) -> String {
     debug(b);
     debug(c);
     debug(&program);
-    
+
     let output: Vec<i64> = run_program(&a, &b, &c, &program);
-    return output.iter().map(|x| { x.to_string() }).collect::<Vec<String>>().join(",");
+    return output
+        .iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
 }
 
 fn day17_part2(lines: &Vec<String>) -> String {
@@ -187,9 +270,17 @@ fn main() {
     let func = match func_name.as_str() {
         "day17_part1" => day17_part1,
         "day17_part2" => day17_part2,
+        "day22_part1" => day22_part1,
+        "day22_part2" => day22_part2,
         _ => unimplemented!("{}", func_name),
     };
+
+    println!("---------- Running {}({}) ----------", &args[1], &args[2]);
+    let now = Instant::now();
     println!("{}", func(&lines));
+    let elapsed = now.elapsed();
+    println!("---------- Execution complete in {:.2?} ----------", elapsed);
+
 }
 
 #[cfg(debug_assertions)]
@@ -266,7 +357,11 @@ trait Graph {
 }
 
 impl Graph for Grid {
-    fn is_neighbor(&self, Position{x:x1, y:y1}: &Position, Position{x:x2, y:y2}: &Position) -> bool {
+    fn is_neighbor(
+        &self,
+        Position { x: x1, y: y1 }: &Position,
+        Position { x: x2, y: y2 }: &Position,
+    ) -> bool {
         return (0..self.height).contains(y1)
             && (0..self.height).contains(y2)
             && (0..self.width).contains(x1)
@@ -275,12 +370,12 @@ impl Graph for Grid {
             && self.grid[*y2][*x2] != "#";
     }
 
-    fn neighbors(Position{x, y}: &Position) -> Vec<Position> {
+    fn neighbors(Position { x, y }: &Position) -> Vec<Position> {
         vec![
-            Position { x: *x + 1, y: *y},
-            Position { x: *x - 1, y: *y},
-            Position { x: *x, y: *y + 1},
-            Position { x: *x, y: *y - 1},
+            Position { x: *x + 1, y: *y },
+            Position { x: *x - 1, y: *y },
+            Position { x: *x, y: *y + 1 },
+            Position { x: *x, y: *y - 1 },
         ]
     }
 }
