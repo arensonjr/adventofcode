@@ -14,6 +14,38 @@ from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
 
 ######################################################################
 
+def day23_part1(lines):
+    # Parse input
+    g = networkx.Graph()
+    for line in lines:
+        one, two = line.split('-')
+        g.add_edge(one, two)
+
+    triplets = set()
+    for node1 in [n for n in g.nodes if n.startswith('t')]:
+        nbrs1 = set(g.neighbors(node1))
+        for node2 in nbrs1:
+            nbrs2 = set(g.neighbors(node2))
+
+            triplets |= set(frozenset((node1, node2, n)) for n in nbrs1.intersection(nbrs2))
+
+    debug(f'{triplets}')
+    return len(triplets)
+
+def day23_part2(lines):
+    # Parse input
+    g = networkx.Graph()
+    for line in lines:
+        one, two = line.split('-')
+        g.add_edge(one, two)
+
+    # Find complete subgraphs
+    clique, size = networkx.max_weight_clique(g, weight=None)
+    debug(f'{clique}')
+    return ','.join(sorted(clique))
+
+######################################################################
+
 def day21_bfs(grid:Grid, start:Pos, end:Pos) -> set[str]:
     paths = collections.defaultdict(set)
     costs = collections.defaultdict(lambda: math.inf)
@@ -24,8 +56,6 @@ def day21_bfs(grid:Grid, start:Pos, end:Pos) -> set[str]:
             break
         next_path = path + (next,)
 
-        # I have a feeling pt2 will require me to count number of ways of making stuff,
-        # so do a complicated `visited` check and maintain paths
         if not paths[next] == 0 or costs[next] == cost:
             costs[next] = cost
             paths[next] = paths[next] | {next_path}
