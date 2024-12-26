@@ -6,11 +6,348 @@ import math
 import networkx
 import os
 import re
+import sympy
 import sys
 import time
 import typing
 
 from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
+
+######################################################################
+
+def parse_lock(lock):
+    debug(f'parsing {lock=}')
+    pins = []
+    for i in range(len(lock[0])):
+        for j in range(len(lock)):
+            if lock[j][i] == '.':
+                pins.append(j)
+                debug(f'  pin {i}: {j}')
+                break
+    debug(f'{pins=}')
+    return pins
+
+def day25_part1(lines):
+    # Parse input
+    schematics = split_list(lines, on='')
+    locks = []
+    keys = []
+    for schematic in schematics:
+        debug(f'parsing {schematic=}')
+        if schematic[0] == '#####':
+            debug(f'sliced lock = {schematic[1:]}')
+            locks.append(parse_lock(schematic[1:]))
+        else:
+            debug(f'sliced key = {schematic[-2::-1]}')
+            keys.append(parse_lock(schematic[-2::-1]))
+
+    matches = 0
+    for key in keys:
+        for lock in locks:
+            fits = True
+            for i in range(len(key)):
+                if key[i] + lock[i] > 5:
+                    fits = False
+                    break
+            if fits:
+                debug(f'{lock=} and {key=} fit!')
+                matches += 1
+            else:
+                debug(f'{lock=} and {key=} do not fit at all =(')
+    return matches
+
+def day25_part2(lines):
+    return 0 # Can't do it til I finish day 24 =(
+
+######################################################################
+
+def day24_part1(lines):
+    # Parse input
+    blank = lines.index("")
+    register_lines = lines[:blank]
+    rule_lines = lines[blank+1:]
+    registers = {}
+    for line in register_lines:
+        reg, val = line.split(':')
+        registers[reg] = int(val)
+    for line in rule_lines:
+        reg1, op, reg2, arrow, reg3 = line.split()
+        registers[reg3] = (reg1, reg2, op)
+
+    @functools.lru_cache
+    def _solve_register(reg):
+        val = registers[reg]
+        if isinstance(val, int):
+            return val
+        else:
+            reg1, reg2, op = val
+            reg1 = _solve_register(reg1)
+            reg2 = _solve_register(reg2)
+            if op == 'AND': return reg1 & reg2
+            if op == 'OR': return reg1 | reg2
+            if op == 'XOR': return reg1 ^ reg2
+
+    # Solve for z*
+    zs = sorted([reg for reg in registers if reg.startswith('z')], reverse=True)
+    zs_in_binary = ''.join(str(_solve_register(z)) for z in zs)
+    return int(zs_in_binary, base=2)
+
+def day24_part2_orig(lines):
+    # Parse input: This time, we only care about register names
+    blank = lines.index("")
+    register_lines = lines[:blank]
+    rule_lines = lines[blank+1:]
+    registers = {}
+    for line in register_lines:
+        reg, _ = line.split(':')
+        if reg not in registers:
+            registers[reg] = sympy.symbols(reg)
+
+    rules = {}
+    definitions = {}
+    for line in rule_lines:
+        reg1, op, reg2, _arrow, reg3 = line.split()
+        rules[reg3] = (reg1, reg2, op)
+        definitions[frozenset([reg1, reg2, op])] = reg3
+
+    swaps = [
+        ('qjj', 'gjc'),
+        # ('pqv', 'rqq'),
+    ]
+    for (one, two) in swaps:
+        rules[one], rules[two] = rules[two], rules[one]
+
+    @functools.lru_cache
+    def _solve_register(reg):
+        if reg in registers:
+            return registers[reg]
+
+        reg1, reg2, op = rules[reg]
+        reg1 = _solve_register(reg1)
+        reg2 = _solve_register(reg2)
+
+        if op == 'AND': return reg1 & reg2
+        if op == 'OR': return reg1 | reg2
+        if op == 'XOR': return reg1 ^ reg2
+
+    # Solve for z*
+    zs = {
+        z: _solve_register(z)
+        for z in rules
+        if z.startswith('z')
+    }
+    # Each digit zN should be equal to (xN ^ yN)         ^ (x(N-1) & y(N-1) | (
+    #                                  (x(N-1) ^ y(N-1)) ^ (x(N-2)...)))
+    # for z in sorted(zs.keys(), reverse=True):
+    #     debug(f'{z}: {zs[z]}')
+
+    expected = {'z00': registers['x00'] ^ registers['y00']}
+    mismatches = []
+    for i in range(1, int(max(zs)[1:]) + 1):
+        x, y, z = f'x{i:0>2}', f'y{i:0>2}', f'z{i:0>2}'
+        debug(f'Calculating expected value for {z}')
+
+        carry = False
+        carry_reg = None
+        for j in range(i):
+            xj, yj, zj = f'x{j:0>2}', f'y{j:0>2}', f'z{j:0>2}'
+            carry = (registers[xj] & registers[yj]) | ((registers[xj] ^ registers[yj]) & carry)
+
+            # TODO: Doesn't work for z02 means my carry is wrong for the `if carry_reg` case
+            and_reg = definitions[frozenset([xj, yj, 'AND'])]
+            if not carry_reg:
+                carry_reg = and_reg
+            else:
+                carry_reg = definitions[frozenset([and_reg, carry_reg, 'OR'])]
+
+        xor_reg = definitions[frozenset([x, y, 'XOR'])]
+        expected_reg = definitions[frozenset([carry_reg, xor_reg, 'XOR'])]
+        if expected_reg != z:
+            debug(f'ERROR: mistmatch on {z} (expected {carry_reg})')
+        if z == max(zs):
+            expected = carry
+        else:
+            expected = registers[x] ^ registers[y] ^ carry
+        # debug(f'  |- {expected=}')
+        # debug(f'  |-   actual={zs[z]}')
+
+        # debug(f'  |- Is equal? {sympy.logic.boolalg.to_cnf(expected) == sympy.logic.boolalg.to_cnf(zs[z])}')
+        # debug(f'  |- Is equal? {str(expected) == str(zs[z])}')
+        if str(expected) != str(zs[z]):
+            mismatches.append((z, expected, zs[z]))
+
+
+    # for z, expected, actual in mismatches:
+    #     debug(f'===== MISMATCH: {z} =====')
+    #     debug(f'  {expected=}')
+    #     debug(f'    {actual=}')
+    # mismatch on z11: y11 AND x11 -> qjj
+    #                  x11 AND y11 -> gjc
+    # mismatch on z17: 
+    #                  
+    # TODO: for debugging purposes, save what intermediate register was supposed to represent this and have a reverse lookup on it?
+
+
+    return 0
+
+# What if instead:
+#  1. Recursively expand reg = left OP right (starting with reg=zNN)
+#  2. Base case: `left OP right` is actually a single x/y literal
+#     -> return the single x/y literal register name
+#  3. Recurisvely expand left=... and right=... to get leftreg and rightreg
+#  4. Check for existence of `leftreg OP rightreg -> reg` (order-agnostic)
+#     -> if not, this is a swap
+#  3. Recursive case: expect it to be rec_call() OP rec_call()? Do I need to deconstruct the expectation I've built?
+#       If it's not, look for a register that WOULD match the two subcalls I got.
+#       If can't find that, see if there's a register that does? e.g. (leftreg OP $ANY) or ($ANY op rightreg)?
+
+def day24_part2(lines):
+    # Parse input: This time, we only care about register names
+    blank = lines.index("")
+    register_lines = lines[:blank]
+    rule_lines = lines[blank+1:]
+    registers = {}
+    for line in register_lines:
+        reg, _ = line.split(':')
+        if reg not in registers:
+            registers[reg] = sympy.symbols(reg)
+
+    rules = {}
+    for line in rule_lines:
+        reg1, op, reg2, _arrow, reg3 = line.split()
+        rules[reg3] = (reg1, reg2, op)
+
+    # TODO: Swaps once I know some!
+    swaps = [
+        ('z39', 'qsb'),
+        ('z26', 'gvm'),
+        ('z17', 'wmp'),
+        # After this, sfm and z11/z12 are still wrong, so that swap didn't QUITE work.
+        # ('z11', 'sfm'),
+        ('qjj', 'gjc'),
+    ]
+    for a, b in swaps:
+        rules[a], rules[b] = rules[b], rules[a]
+    # Some wrong registers:
+    # (2) - z39 (x39 AND y39) -- probably swapped with qsb
+    # (2) - z26 (is an AND of two things, not an xor) -- looks like a swap with gvm
+    #       gvm (two steps away from z27)
+    # (2) - wmp (goes into an XOR with z18)
+    #       z17 (looks like input of z18)
+    # (2) - sfm (goes into XOR of z12)
+    #       z11 (looks like the input of z12)
+
+    # Build up a symbolic representation of what the registers ACTUALLY are
+    solved = {}
+    @functools.lru_cache
+    def _solve_register(reg):
+        if reg in registers:
+            return registers[reg]
+
+        # TODO: Store intermediate solutions with the register name so I can look them up later?
+
+        reg1_name, reg2_name, op = rules[reg]
+        reg1 = _solve_register(reg1_name)
+        solved[reg1_name] = reg1
+        reg2 = _solve_register(reg2_name)
+        solved[reg2_name] = reg2
+
+        if op == 'AND': return sympy.logic.boolalg.And(reg1, reg2, evaluate=False)
+        if op == 'OR': return sympy.logic.boolalg.Or(reg1, reg2, evaluate=False)
+        if op == 'XOR': return sympy.logic.boolalg.Xor(reg1, reg2, evaluate=False)
+
+    def _expected_z(i, is_max=False):
+        x, y = f'x{i:0>2}', f'y{i:0>2}'
+        carry = False
+        for j in range(i):
+            xj, yj = f'x{j:0>2}', f'y{j:0>2}'
+            carry = (registers[xj] & registers[yj]) | ((registers[xj] ^ registers[yj]) & carry)
+        return carry if is_max else registers[x] ^ registers[y] ^ carry
+
+    def _split_sympy(expr):
+        lhs, rhs, third, fourth, fifth = sympy.Wild('lhs'), sympy.Wild('rhs'), sympy.Wild('third'), sympy.Wild('fourth'), sympy.Wild('fifth')
+        if (match := expr.match(lhs | rhs)):
+            op = 'OR'
+        elif (match := expr.match(lhs & rhs)):
+            op = 'AND'
+        elif (match := expr.matches(lhs ^ rhs)):
+            op = 'XOR'
+
+        if match:
+            return match[lhs], match[rhs], op
+        elif (match := expr.match(lhs ^ rhs ^ third)):
+            # debug(f'triple xor: treating a^b^c as (a^b)^(c)')
+            lhs = match[lhs] ^ match[rhs]
+            rhs = match[third]
+            op = 'XOR'
+            return lhs, rhs, op
+        elif (match := expr.match(lhs ^ rhs ^ third ^ fourth ^ fifth)):
+            # debug(f'quint xor: treating a^b^c^d^e as (b^d)^((a^c)^e)')
+            return match[rhs] ^ match[fourth], match[lhs] ^ match[third] ^ match[fifth], 'XOR'
+        else:
+            # debug(f'NO MATCH: {type(expr)=} {len(expr.args), expr.args[0], expr.args[1]}')
+            if isinstance(expr, sympy.logic.boolalg.Xor):
+                # debug(f'Alt typecheck worked')
+                return expr.args[0], expr.args[1], 'XOR'
+
+    # Solve for what the registers SHOULD be
+    mismatches = []
+    @functools.lru_cache
+    def _expect_register(reg, expected, actual):
+        # We don't need to check for errors if they already match.
+        if expected == actual:
+            # debug(f'Reg {reg}: OK')
+            return
+
+        # Base case: xNN or yNN
+        if reg in registers:
+            if registers[reg] == expected:
+                return expected
+            else:
+                debug(f'MISMATCH: {expected=} but found actual={registers[reg]}')
+                return registers[reg]
+        
+        # Otherwise: Recurse on both sides of the op and combine them
+        lhs, rhs, expected_op = _split_sympy(expected)
+        if _split_sympy(actual) is None:
+            debug(f'WTF, couldnt split {actual}?')
+        actual_lhs, actual_rhs, actual_op = _split_sympy(actual)
+        reg1, reg2, op = rules[reg]
+
+
+        # Fix ordering problems
+        if solved[reg1] == actual_rhs or solved[reg2] == actual_lhs:
+            reg1, reg2 = reg2, reg1
+        if actual_lhs != lhs:
+            lhs, rhs = rhs, lhs
+
+        # See if it's (obviously) a problem with THIS REGISTER; if so, find a swap for it
+        # (actual_lhs != lhs should only happen at this point if BOTH sides are wrong)
+        if actual_lhs != lhs or expected_op != actual_op:
+            debug(f'MISMATCH: {reg}\n\tshould be {expected}\n\tbut was {actual}')
+            mismatches.append((reg, expected, actual))
+            for other_reg, other_expr in solved.items():
+                if expected == other_expr:
+                    debug(f'  \\-> Swap {reg} and {other_reg}?')
+            return
+
+        # Recursively find more errors
+        _expect_register(reg1, lhs, actual_lhs)
+        _expect_register(reg2, rhs, actual_rhs)
+
+    actual = {
+        z: _solve_register(z)
+        for z in rules
+        if z.startswith('z')
+    }
+    expected = {
+        z: _expected_z(int(z[1:]), is_max=(z == max(actual)))
+        for z in actual
+    }
+    for z in expected:
+        _expect_register(z, expected[z], actual[z])
+
+    return ','.join(sorted(x for pair in swaps for x in pair))
 
 ######################################################################
 
@@ -588,6 +925,20 @@ def every_n_lines(lines, n, gap=False):
         lines += ['final gap line']
     grouped = zip(*[iter(lines)]*per_group)
     return list(grouped) if not gap else [group[:-1] for group in grouped]
+
+def split_list(ls, on=''):
+    lists = []
+    sublist = []
+    for elem in ls:
+        if elem == on:
+            lists.append(sublist)
+            sublist = []
+        else:
+            sublist.append(elem)
+    if sublist:
+        lists.append(sublist)
+    return lists
+
 
 # Boilerplate & helper functions
 

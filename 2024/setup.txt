@@ -5,6 +5,7 @@ uv python install 3.13
 uv venv
 uv pip install networkx
 uv pip install unpackable
+uv pip install sympy
 
 # To install Kotlin:
 # download from https://github.com/JetBrains/kotlin/releases/
