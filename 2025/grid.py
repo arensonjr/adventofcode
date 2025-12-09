@@ -9,7 +9,7 @@ class Grid(abc.ABC):
     """Grid of space for Advent of Code.
 
     This is an abstract class, and is designed to be overridden """
-    def __init__(self, lines:list[int]=None, _height=None, _width=None, _grid=None):
+    def __init__(self, lines:list[list[str]]=[], _height=None, _width=None, _grid=None):
         # Secret copy constructor!
         if _height and _width and _grid:
             self._height = _height
@@ -59,9 +59,9 @@ class Grid(abc.ABC):
     def regions(self):
         return list(networkx.connected_components(self.grid))
 
-    def in_front_of(self, pos:Pos, vec:Vector, until=None) -> list[(Pos, str)]:
+    def in_front_of(self, pos:Pos, vec:Vector, until=None) -> list[tuple[Pos, str]]:
         """Returns the grid values if you were to stand at `pos` and face in the `vec` direction.
-        
+
         If `until` is provided, this stops before finding one of those values."""
         line = []
         while (pos := pos + vec) in self and self[pos] != until:
@@ -149,8 +149,11 @@ class Pos(unpackable.Unpackable):
     x : int
     y : int
 
-    def adjacents(self) -> list[int]:
+    def adjacents(self) -> list[Pos]:
         return [self.shift(vec) for vec in DIRECTIONS]
+
+    def surrounding(self) -> set[Pos]:
+        return {self.shift(vec) for vec in DIRECTIONS} | {self.shift(v1).shift(v2) for v1 in [LEFT, RIGHT] for v2 in [UP, DOWN]}
 
     def shift(self, vec:Vector) -> Pos:
         return Pos(self.x + vec.dx, self.y + vec.dy) 
