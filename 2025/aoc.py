@@ -6,10 +6,12 @@ import itertools
 import heapq
 import logging
 import math
-# import networkx
+import networkx
+import numpy
 # import operator
 # import os
-# import re
+import re
+import scipy.optimize
 import shapely
 # import sympy
 import sys
@@ -22,6 +24,380 @@ from absl.flags import FLAGS
 
 # from grid import Pos, Vector, Grid, UP, DOWN, LEFT, RIGHT, DIRECTIONS
 from grid import Grid, Pos
+
+######################################################################
+
+
+# 427
+def day12_part1(lines):
+    # Parse input
+    presents, regions = _parse_present_regions(lines)
+
+    # Recursively try to make them fit
+    fits = 0
+    for i, region in enumerate(regions):
+        x, y = region[0][0], region[0][1]
+        empty_region = ('.' * x,) * y
+        log.debug('========== Region %d: %dx%d ==========', i, x, y)
+        if _fill_presents(empty_region, region[1], presents):
+            fits += 1
+        global recursion_count
+        log.debug('%d total fits, %d total recursion count', fits, recursion_count)
+
+    return fits
+
+recursion_count = 0
+@functools.cache
+def _fill_presents(region, present_counts, presents):
+    global recursion_count
+    recursion_count += 1
+    if recursion_count % 10_000 == 0:
+        log.debug(f'{recursion_count=} {sum(present_counts)=}\n{'\n'.join(region)}')
+    # log.debug('=== Recursion: Trying to fill region with %s ===\n%s', present_counts, '\n'.join(region))
+    # log.debug('=== Recursion: Trying to fill region with %s ===', present_counts)
+
+
+    # Base case: No more presents to fit
+    if all(p == 0 for p in present_counts):
+        log.debug('Fits! Final region:\n%s', '\n'.join(region))
+        return True
+
+    # first_open = (-1, -1)
+    # for y in range(len(region) - 2):
+    #     for x in range(len(region[y]) - 2):
+    #         if region[y][x] == '.':
+    #             first_open = (x, y)
+    #             break
+    #     if first_open > (-1, -1):
+    #         break
+    # if first_open == (-1, -1):
+    #     log.debug('  - No open spots:\n%s', '\n'.join(region))
+    #     return False
+    # x, y = first_open
+    openings = [(x, y) for x in range(len(region[0])) for y in range(len(region)) if region[y][x] == '.']
+
+    # Prune openings to make sure there's enough room for remaining presents
+    remaining = 0
+    for ct, present in zip(present_counts, presents):
+        blocks = sum(1 if sq == '#' else 0 for row in present[0] for sq in row)
+        remaining += ct * blocks
+    # log.debug('%d remaining pips, openings = %s -> %s', remaining, openings, openings[:-remaining])
+    openings = openings[:-remaining]
+
+    # Inductive case: Try fitting each necessary present into the first unoccupied spot
+    for (x, y) in openings:
+        for i in range(len(present_counts)):
+            if present_counts[i] == 0: continue
+            # log.debug('Trying to fit present #%d into region at %d,%d', i, x, y)
+
+            present = presents[i]
+            for shape in present:
+                # log.debug('Trying to fit shape in region at %d,%d:\n%s\n\n%s', x, y, '\n'.join(shape), '\n'.join(region))
+                # Try to fit it in
+                if _fits(region, x, y, shape):
+                    # log.debug('  - Fits!')
+                    new_region = list(region)
+                    for j in range(y, y + 3):
+                        new_region[j] = new_region[j][0:x] + ''.join(shape[j-y][i-x] if shape[j-y][i-x] == '#' else new_region[j][i] for i in range(x, x + 3)) + new_region[j][x+3:]
+                    # log.debug(region)
+                    # log.debug(new_region)
+                    if _fill_presents(tuple(new_region), tuple(present_counts[k]-1 if k == i else present_counts[k] for k in range(len(present_counts))), presents):
+                        return True
+
+    # None of the attempts worked
+    return False
+
+
+def _fits(region, x, y, present):
+    for i in range(3):
+        for j in range(3):
+            try:
+                if present[j][i] == '#' and (y + j >= len(region) or x + i >= len(region[y+j]) or region[y + j][x + i] == '#'):
+                    return False
+            except IndexError as e:
+                log.debug('Cant fit index %d %d into %s?', i, j, present)
+                raise e
+    return True
+
+
+
+def _parse_present_regions(lines):
+    # Present shapes
+    presents = []
+    for i in range(6):
+        present = tuple(lines[i * 5 + 1 : i * 5 + 4])
+        rotations = set()
+        # Rotate and flip
+        for p in [present, _flip(present)]:
+            rotations.add(p)
+            for _ in range(3):
+                p = _rotate(p)
+                rotations.add(p)
+        presents.append(tuple(rotations))
+    presents = tuple(presents)
+    log.debug('Presents: %s', presents)
+
+    # Regions
+    regions = []
+    num = '(\\d+)'
+    region_pattern = re.compile(f'{num}x{num}: {num} {num} {num} {num} {num} {num}')
+    for line in lines[30:]:
+        parts = region_pattern.match(line)
+        if parts is not None:
+            parts = parts.groups()
+            regions.append((tuple(int(n) for n in parts[0:2]), tuple(int(n) for n in parts[2:])))
+
+    return presents, regions
+
+
+def _rotate(present):
+    """Rotates 90 degrees to the right and returns the resulting shape"""
+    return tuple(''.join(l[i] for l in present[::-1]) for i in range(len(present[0])))
+
+def _flip(present):
+    return tuple(l[::-1] for l in present)
+
+
+
+######################################################################
+
+
+# 603
+def day11_part1(lines):
+    # Parse input
+    digraph = collections.defaultdict(list)
+    for line in lines:
+        pieces = line.split()
+        source = pieces[0][:-1]
+        dests = pieces[1:]
+        digraph[source] = dests
+
+    # Graph search for numpaths
+    paths = collections.defaultdict(int, {'you': 1})
+    queue = collections.deque(['you'])
+    visited = set()
+    while queue:
+        source = queue.popleft()
+        if source in visited:
+            continue
+        visited.add(source)
+
+        for nbr in digraph[source]:
+            log.debug('Adding %d paths to %s->%s', paths[source], source, nbr)
+            paths[nbr] += paths[source]
+            queue.append(nbr)
+
+    log.debug(paths)
+
+
+    return paths['out']
+
+
+# 380961604031372
+def day11_part2(lines):
+    # Parse input
+    digraph = collections.defaultdict(set)
+    digraph = networkx.digraph.DiGraph()
+    for line in lines:
+        pieces = line.split()
+        source = pieces[0][:-1]
+        for dest in pieces[1:]:
+            digraph.add_edge(source, dest)
+
+    # Graph search for numpaths through dac/fft
+    paths = {'svr': (1, 0, 0, 0)}
+    for source in networkx.topological_sort(digraph):
+        invalid, dac, fft, both = paths[source]
+
+        for nbr in digraph[source]:
+
+            nbr_i, nbr_d, nbr_f, nbr_b = paths.get(nbr, (0, 0, 0, 0))
+            if nbr == 'dac':
+                log.debug('Found dac!')
+                i, d, f, b = nbr_i, nbr_d + invalid + dac, nbr_f, nbr_b + fft + both
+                log.debug('(%d, %d, %d, %d) + (%d, %d, %d, %d) -> (%d, %d, %d, %d)', nbr_i, nbr_d, nbr_f, nbr_b, invalid, dac, fft, both, i, d, f, b)
+            elif nbr == 'fft':
+                log.debug('Found fft!')
+                i, d, f, b = nbr_i, nbr_d, nbr_f + invalid, nbr_b + dac + both
+            else:
+                i, d, f, b = nbr_i + invalid, nbr_d + dac, nbr_f + fft, nbr_b + both
+
+            log.debug('Setting (%d, %d, %d, %d) paths to %s->%s', i, d, f, b, source, nbr)
+            paths[nbr] = (i, d, f, b)
+
+    log.debug(paths)
+
+    return paths['out'][3]
+
+
+######################################################################
+
+
+# 17133
+def day10_part2(lines):
+    # Parse input (ignoring the lights)
+    boards = []
+    for line in lines:
+        parts = line.split()
+        joltages = tuple(int(x) for x in parts[-1][1:-1].split(','))
+        # joltages = numpy.array(list(int(parts[-1][i+1]) for i in range(len(parts[-1])-2)))
+        buttons = []
+        for button in parts[1:-1]:
+            numbers = set(int(x) for x in button[1:-1].split(','))
+            # buttons.append(numpy.array(list(1 if i in numbers else 0 for i in range(joltages.size))))
+            buttons.append(tuple(1 if i in numbers else 0 for i in range(len(joltages))))
+
+        boards.append((joltages, buttons))
+
+    log.debug('Boards: %s', boards)
+
+    total_moves = 0
+    maxsize_moves = 0
+    for joltages, buttons in boards:
+        result = scipy.optimize.milp(
+                # Minimize the total number of button presses (equal weights)
+                [1] * len(buttons),
+                # Integer number of button presses
+                integrality=[1] * len(buttons),
+                # Minimize this system of equations:
+                #   e.g. (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
+                #    --> 0a + 0b + 0c + 0d + 1e + 1f = 3
+                #        0a + 1b + 0c + 0d + 0e + 1f = 5
+                #        0a + 0b + 1c + 1d + 1e + 0f = 4
+                #        1a + 1b + 0c + 1d + 0e + 0f = 7
+                # So, the nth coefficient in the kth equation is whether or not the nth
+                # button increments the kth joltage.
+                constraints=scipy.optimize.LinearConstraint(
+                    A=[[button[i] for button in buttons] for i in range(len(joltages))],
+                    # (equal bounds for an equality constraint)
+                    lb=joltages,
+                    ub=joltages,
+                ))
+
+        moves = int(sum(result.x))
+        total_moves += moves
+        log.debug(f'{result.success=} -- {moves} ({result.x=})')
+
+        # log.debug('===== Starting: %s ===== %s', joltages, buttons)
+        # moves = _fill_joltages2(joltages, buttons)
+        # log.debug('%d moves to solve %s %s', moves, joltages, buttons)
+        # if moves >= sys.maxsize:
+        #     maxsize_moves += 1
+        # total_moves += moves
+
+    # log.debug('(%d maxsize moves)', maxsize_moves)
+    return total_moves
+
+
+def _fill_joltages2(joltage, buttons):
+    # Base case: already done
+    if sum(joltage) == 0:
+        return 0
+
+    # Pick the joltage with the fewest satisfying buttons to solve first
+    i = min(range(len(joltage)), key=lambda x: sum(button[x] for button in buttons) + (0 if joltage[x] else sys.maxsize))
+
+    # Otherwise: satisfy the smallest nonzero joltage, then satisfy the rest
+    # i = min(range(len(joltage)), key=lambda x: joltage[x] or sys.maxsize)
+    log.debug('  - Solving joltage[%d] for %s / %s', i, joltage, buttons)
+    if any(joltage[i] > 0 and sum(b[i] for b in buttons) == 0 for i in range(len(joltage))):
+        log.debug('    - Illegal state; buttons cant satisfy this')
+        return sys.maxsize
+
+    moves = [sys.maxsize]
+    for button in buttons:
+        if button[i] == 0: continue
+
+        move = sys.maxsize
+        presses = joltage[i]
+        while move >= sys.maxsize and presses > 0:
+            log.debug('    - Trying to press %s %d times for %s', button, presses, joltage)
+            new_joltage = tuple(joltage[x] - presses * button[x] for x in range(len(joltage)))
+            presses //= 2 # just in case we need to loop again
+            if any(j < 0 for j in new_joltage):
+                continue
+            move = joltage[i] + _fill_joltages2(new_joltage, buttons - {button})
+
+        moves.append(move)
+
+    if moves == [sys.maxsize]:
+        # log.debug('  - Unable to solve %s! Falling back', joltage)
+        # return _fill_joltages(joltage, tuple(buttons))
+        return sys.maxsize
+
+    return min(moves)
+
+
+
+
+@functools.cache
+def _fill_joltages(joltage, buttons):
+    """Returns the min number of moves to fill the remaining joltages."""
+    if all(j == 0 for j in joltage):
+        return 0
+
+    if not buttons:
+        # log.debug('Need to fill %s but buttons is %s! Impossible', joltage, buttons)
+        return sys.maxsize
+
+    moves = []
+    # Try the best buttons first
+    options = list(buttons)
+    target = numpy.array(joltage) / max(joltage)
+    options.sort(key=lambda b: sum(abs(target - b)))
+    # log.debug('Sorted buttons for %s: %s', joltage, options)
+    for button in options:
+        npbutton = numpy.array(button)
+        # try:
+        #     presses = math.floor(min(joltage / npbutton))
+        # except ValueError:
+        #     presses = 0
+        if any(joltage - npbutton < 0):
+            continue
+
+        moves.append(1 + _fill_joltages(tuple(joltage - npbutton), buttons))
+
+    # log.debug('  - Solving %s took %s moves -> %d', joltage, moves, min([sys.maxsize] + moves))
+    return min([sys.maxsize] + moves)
+
+
+
+# 498
+def day10_part1(lines):
+    # Parse input (ignoring the joltages)
+    boards = []
+    for line in lines:
+        parts = line.split()
+        lights = {i if parts[0][i+1] == '#' else -1 for i in range(len(parts[0])-2)} - {-1}
+        buttons = []
+        for button in parts[1:-1]:
+            buttons.append(frozenset(int(x) for x in button[1:-1].split(',')))
+
+        boards.append((lights, buttons))
+
+    log.debug('Boards: %s', boards)
+
+    # Find matching combos
+    total_moves = 0
+    for lights, buttons in boards:
+        best_moves = math.inf
+        log.debug('Searching for %s', lights)
+        for button_set in itertools.chain.from_iterable(itertools.combinations(buttons, i) for i in range(len(buttons)+1)):
+            effective_lights = functools.reduce(set.symmetric_difference, button_set, set())
+            log.debug('  - Trying: %s (%s)', effective_lights, list(button_set))
+            if effective_lights == lights:
+                moves = len(button_set)
+                log.debug('  - IT WORKED! %d moves', moves)
+                if moves < best_moves:
+                    best_moves = moves
+
+        total_moves += best_moves
+
+    return total_moves
+
+
+
+
 
 ######################################################################
 
